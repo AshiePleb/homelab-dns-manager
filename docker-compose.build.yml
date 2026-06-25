@@ -1,0 +1,11 @@
+# Developer override — build the app image from source instead of pulling from a registry.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+services:
+  homelab-dns:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${HOMELAB_DNS_IMAGE:-ashiepleb/homelab-dns-manager:dev}
+    pull_policy: build

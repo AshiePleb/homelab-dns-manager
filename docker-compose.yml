@@ -1,0 +1,71 @@
+# Production compose — pulls a pre-built image from Docker Hub (or your registry).
+# Users only need this file + .env — no source code or build step.
+#
+# Quick start:
+#   cp .env.example .env && nano .env
+#   docker compose pull && docker compose up -d
+#
+# To build from source locally instead:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+services:
+  homelab-dns:
+    image: ${HOMELAB_DNS_IMAGE:-ashiepleb/homelab-dns-manager:latest}
+    pull_policy: always
+    container_name: homelab-dns-manager
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      - homelab_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/homelab_dns.db
+      - DDNS_INTERVAL_MINUTES=${DDNS_INTERVAL_MINUTES:-5}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-password}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_NAME=${ADMIN_NAME:-Admin User}
+      - DEBUG=${DEBUG:-false}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - LEGACY_DDNS_DOMAINS=${LEGACY_DDNS_DOMAINS:-}
+      - DDNS_PROXIED_DEFAULT=${DDNS_PROXIED_DEFAULT:-true}
+      - ACME_EMAIL=${ACME_EMAIL:-}
+      - CADDY_CONTAINER=homelab-caddy
+      - SESSION_EXPIRE_MINUTES=${SESSION_EXPIRE_MINUTES:-480}
+      - SESSION_IDLE_MINUTES=${SESSION_IDLE_MINUTES:-60}
+    depends_on:
+      - caddy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: homelab-caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - homelab_data:/data
+    command:
+      - sh
+      - -c
+      - |
+        mkdir -p /data/caddy
+        if [ ! -f /data/caddy/Caddyfile ]; then
+          printf '%s\n' ':80 {' '    respond "HomeLab DNS Manager — starting" 200' '}' > /data/caddy/Caddyfile
+        fi
+        exec caddy run --config /data/caddy/Caddyfile --adapter caddyfile
+    environment:
+      - ACME_AGREE=true
+
+volumes:
+  homelab_data:
