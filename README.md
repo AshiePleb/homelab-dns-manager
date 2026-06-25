@@ -7,6 +7,7 @@
 
 | | |
 |---|---|
+| **GitHub** | [AshiePleb/homelab-dns-manager](https://github.com/AshiePleb/homelab-dns-manager) |
 | **Docker image** | [`ashiepleb/homelab-dns-manager`](https://hub.docker.com/r/ashiepleb/homelab-dns-manager) |
 | **Quick install** | [`install/docker-compose.yml`](install/docker-compose.yml) + [`.env.example`](install/.env.example) |
 | **Docker Hub overview** | [DOCKERHUB.md](DOCKERHUB.md) (copy for Hub listing) |
