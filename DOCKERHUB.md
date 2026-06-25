@@ -26,8 +26,8 @@ You only need **docker-compose.yml** and **.env** — no source code or build st
 ```bash
 mkdir -p ~/homelab-dns-manager && cd ~/homelab-dns-manager
 
-curl -fsSLO https://raw.githubusercontent.com/ashiepleb/homelab-dns-manager/main/install/docker-compose.yml
-curl -fsSLO https://raw.githubusercontent.com/ashiepleb/homelab-dns-manager/main/install/.env.example
+curl -fsSLO https://raw.githubusercontent.com/AshiePleb/homelab-dns-manager/main/install/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/AshiePleb/homelab-dns-manager/main/install/.env.example
 
 cp .env.example .env
 chmod 600 .env
@@ -90,7 +90,7 @@ HOMELAB_DNS_IMAGE=ashiepleb/homelab-dns-manager:v1.0.0
 
 ## Links
 
-- **Source:** https://github.com/ashiepleb/homelab-dns-manager
+- **Source:** https://github.com/AshiePleb/homelab-dns-manager
 - **Image:** `docker pull ashiepleb/homelab-dns-manager:latest`
 
 ---

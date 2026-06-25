@@ -15,13 +15,13 @@ They run:
 
 ```bash
 mkdir -p ~/homelab-dns-manager && cd ~/homelab-dns-manager
-curl -fsSLO https://raw.githubusercontent.com/ashiepleb/homelab-dns-manager/main/install/docker-compose.yml
-curl -fsSLO https://raw.githubusercontent.com/ashiepleb/homelab-dns-manager/main/install/.env.example
+curl -fsSLO https://raw.githubusercontent.com/AshiePleb/homelab-dns-manager/main/install/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/AshiePleb/homelab-dns-manager/main/install/.env.example
 cp .env.example .env && nano .env
 docker compose pull && docker compose up -d
 ```
 
-Replace `ashiepleb/homelab-dns-manager` in the URLs with your GitHub org/repo.
+Replace `AshiePleb/homelab-dns-manager` in the URLs if your GitHub username differs.
 
 ---
 
@@ -80,7 +80,7 @@ cd "/path/to/HomeLab DNS Manager"
 git init   # if not already a repo
 git add .
 git commit -m "Initial release"
-git remote add origin git@github.com:ashiepleb/homelab-dns-manager.git
+git remote add origin git@github.com:AshiePleb/homelab-dns-manager.git
 git push -u origin main
 ```
 
@@ -92,7 +92,7 @@ After the first image is on Docker Hub, users can install without cloning the fu
 
 ### Option A — mirror GitHub
 
-In Gitea: **New Migration** → **GitHub** → source URL `https://github.com/ashiepleb/homelab-dns-manager`.
+In Gitea: **New Migration** → **GitHub** → source URL `https://github.com/AshiePleb/homelab-dns-manager`.
 
 ### Option B — push directly to Gitea
 
