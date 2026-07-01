@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import DNSRecord, ProxyHost
-from app.services.caddy_service import get_cert_expiry, get_ssl_status, probe_https
+from app.services.caddy_service import get_cert_expiry, get_ssl_status, probe_https, get_cert_issuer
 from app.services.port_check import check_port
 
 EXPIRY_WARN_DAYS = 14

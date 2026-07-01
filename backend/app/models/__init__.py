@@ -44,6 +44,9 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.VIEWER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_credentials: Mapped[bool] = mapped_column(Boolean, default=False)
+    preferences: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
@@ -173,6 +176,19 @@ class ProxyHost(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class HealthCheckHistory(Base):
+    __tablename__ = "health_check_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    hostname: Mapped[str] = mapped_column(String(255), index=True)
+    overall: Mapped[str] = mapped_column(String(32))
+    dns_ok: Mapped[bool] = mapped_column(Boolean)
+    port_ok: Mapped[bool] = mapped_column(Boolean)
+    https_ok: Mapped[bool] = mapped_column(Boolean)
+    ssl_days_remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 class NPMProxyHost(Base):

@@ -1,16 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { Palette } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useTheme } from "@/context/theme";
+import { usePreferences } from "@/context/theme";
 import { THEMES, ThemeGroup, ThemeId } from "@/lib/themes";
-
-interface ThemePickerProps {
-  variant?: "header" | "settings";
-  disabled?: boolean;
-  value?: ThemeId;
-  onChange?: (theme: ThemeId) => void;
-}
 
 const GROUP_LABELS: Record<ThemeGroup, string> = {
   dark: "Dark",
@@ -20,25 +10,13 @@ const GROUP_LABELS: Record<ThemeGroup, string> = {
 
 const GROUP_ORDER: ThemeGroup[] = ["dark", "light", "accessibility"];
 
-export function ThemePicker({ variant = "header", disabled, value, onChange }: ThemePickerProps) {
-  const { theme, setTheme } = useTheme();
-  const active = value ?? theme;
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+interface ThemePickerProps {
+  disabled?: boolean;
+}
 
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("click", onClick);
-    return () => document.removeEventListener("click", onClick);
-  }, []);
-
-  const pick = (id: ThemeId) => {
-    if (onChange) onChange(id);
-    else setTheme(id);
-    setOpen(false);
-  };
+export function ThemePicker({ disabled }: ThemePickerProps) {
+  const { preferences, setTheme } = usePreferences();
+  const active = preferences.theme;
 
   const groups = GROUP_ORDER.map((group) => ({
     group,
@@ -46,97 +24,53 @@ export function ThemePicker({ variant = "header", disabled, value, onChange }: T
     themes: THEMES.filter((t) => t.group === group),
   }));
 
-  if (variant === "settings") {
-    return (
-      <div className="space-y-5">
-        {groups.map(({ group, label, themes }) => (
-          <ThemeGroup key={group} label={label} themes={themes} active={active} onPick={pick} disabled={disabled} />
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="relative" ref={ref}>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setOpen(!open)}
-        title="Choose theme"
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-      >
-        <Palette className="h-4 w-4" />
-      </Button>
-      {open && (
-        <div
-          className="absolute right-0 top-full z-50 mt-2 w-72 max-h-[min(70vh,28rem)] overflow-y-auto rounded-lg border border-border bg-card p-3 shadow-lg scrollbar-thin"
-          role="listbox"
-          aria-label="Theme options"
-        >
-          <p className="text-xs font-medium text-muted-foreground mb-2 px-1">Theme</p>
-          {groups.map(({ group, label, themes }) => (
-            <ThemeGroup key={group} label={label} themes={themes} active={active} onPick={pick} compact />
-          ))}
+    <div className="space-y-6">
+      {groups.map(({ group, label, themes }) => (
+        <div key={group}>
+          <p className="text-sm font-medium mb-3">{label}</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {themes.map((t) => {
+              const selected = active === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={disabled}
+                  role="option"
+                  aria-selected={selected}
+                  aria-label={`${t.label} theme${t.description ? ` — ${t.description}` : ""}`}
+                  onClick={() => setTheme(t.id as ThemeId)}
+                  className={cn(
+                    "group relative overflow-hidden rounded-lg border-2 p-3 text-left transition-all",
+                    selected
+                      ? "border-primary ring-2 ring-primary/30 shadow-sm"
+                      : "border-border hover:border-primary/50",
+                    disabled && "opacity-50 cursor-not-allowed"
+                  )}
+                >
+                  <div
+                    className="mb-3 h-14 w-full rounded-md border border-border/50 shadow-inner"
+                    style={{
+                      background: `linear-gradient(160deg, hsl(${t.preview.bg}) 0%, hsl(${t.preview.bg}) 55%, hsl(${t.preview.accent}) 100%)`,
+                    }}
+                    aria-hidden
+                  />
+                  <p className="text-sm font-semibold">{t.label}</p>
+                  {t.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{t.description}</p>
+                  )}
+                  {selected && (
+                    <span className="absolute top-2 right-2 text-[10px] font-bold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                      Active
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-function ThemeGroup({
-  label,
-  themes,
-  active,
-  onPick,
-  disabled,
-  compact,
-}: {
-  label: string;
-  themes: typeof THEMES;
-  active: ThemeId;
-  onPick: (id: ThemeId) => void;
-  disabled?: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <div className={cn(compact ? "mb-3 last:mb-0" : "mb-4 last:mb-0")}>
-      <p className="text-xs text-muted-foreground mb-2">{label}</p>
-      <div className={cn("grid gap-2", compact ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3")}>
-        {themes.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            disabled={disabled}
-            role="option"
-            aria-selected={active === t.id}
-            onClick={(e) => {
-              e.stopPropagation();
-              onPick(t.id);
-            }}
-            className={cn(
-              "flex items-center gap-2 rounded-md border-2 px-2 py-2 text-left text-xs transition-colors",
-              active === t.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
-              disabled && "opacity-50 cursor-not-allowed"
-            )}
-          >
-            <span
-              className="h-5 w-5 shrink-0 rounded-full border border-border"
-              style={{
-                background: `linear-gradient(135deg, hsl(${t.preview.bg}) 50%, hsl(${t.preview.accent}) 50%)`,
-              }}
-              aria-hidden
-            />
-            <span className="min-w-0">
-              <span className="font-medium block truncate">{t.label}</span>
-              {t.description && !compact && (
-                <span className="text-[10px] text-muted-foreground line-clamp-2">{t.description}</span>
-              )}
-            </span>
-          </button>
-        ))}
-      </div>
+      ))}
     </div>
   );
 }

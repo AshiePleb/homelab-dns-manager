@@ -17,6 +17,9 @@ from app.schemas import (
     IPChangeLogResponse,
     ManagedDDNSHost,
     ServiceHealthRow,
+    BulkRecordsRequest,
+    BulkRecordsResponse,
+    HealthHistoryPoint,
 )
 from app.core.deps import RequireViewer, RequireOperator
 from app.services.cloudflare_service import (
@@ -27,6 +30,7 @@ from app.services.cloudflare_service import (
 )
 from app.services.ddns_service import get_ddns_status, run_ddns_check, get_managed_hostnames
 from app.services.health_service import get_services_health
+from app.services.health_history_service import get_health_history
 from app.services.settings_service import get_setting, log_activity
 from sqlalchemy import desc
 
@@ -73,6 +77,16 @@ async def dashboard_health(
     _: User = Depends(RequireViewer),
 ):
     return await get_services_health(db)
+
+
+@router_dashboard.get("/health/history", response_model=list[HealthHistoryPoint])
+async def dashboard_health_history(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(RequireViewer),
+    hostname: str | None = None,
+    hours: int = 24,
+):
+    return await get_health_history(db, hostname=hostname, hours=hours)
 
 
 @router_dashboard.get("/activity", response_model=list[ActivityLogResponse])
@@ -333,6 +347,75 @@ async def create_record(
         last_updated_at=record.last_updated_at,
         created_at=record.created_at,
     )
+
+
+@router_records.post("/bulk", response_model=BulkRecordsResponse)
+async def bulk_records(
+    data: BulkRecordsRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(RequireOperator),
+):
+    from app.services.ddns_service import get_public_ip
+
+    action = data.action.lower()
+    if action not in ("enable_ddns", "disable_ddns", "force_update", "delete"):
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+    updated = 0
+    errors: list[str] = []
+
+    for record_id in data.record_ids:
+        result = await db.execute(
+            select(DNSRecord).options(selectinload(DNSRecord.domain)).where(DNSRecord.id == record_id)
+        )
+        record = result.scalar_one_or_none()
+        if not record:
+            errors.append(f"Record {record_id} not found")
+            continue
+        try:
+            if action == "enable_ddns":
+                record.managed = True
+                if record.record_type == "A":
+                    ip = await get_public_ip()
+                    await update_cloudflare_record(db, record, ip, reason="bulk_enable_ddns")
+                updated += 1
+            elif action == "disable_ddns":
+                record.managed = False
+                updated += 1
+            elif action == "force_update":
+                if not record.managed:
+                    errors.append(f"{record.hostname}: not DDNS managed")
+                    continue
+                ip = await get_public_ip()
+                await update_cloudflare_record(db, record, ip, reason="bulk_force_update")
+                updated += 1
+            elif action == "delete":
+                proxy_result = await db.execute(
+                    select(ProxyHost).where(ProxyHost.hostname == record.hostname)
+                )
+                proxy = proxy_result.scalar_one_or_none()
+                if proxy:
+                    from app.services.service_provision import delete_service
+                    await delete_service(db, proxy.id, user_id=user.id)
+                else:
+                    cf = await get_cloudflare_service(db)
+                    if cf and record.cloudflare_record_id and record.domain:
+                        await cf.delete_record(record.domain.zone_id, record.cloudflare_record_id)
+                    await db.delete(record)
+                updated += 1
+            else:
+                errors.append(f"{record.hostname}: unknown action")
+        except Exception as e:
+            errors.append(f"{record.hostname}: {e}")
+
+    await log_activity(
+        db,
+        "dns",
+        f"Bulk {action} on {updated} record(s)",
+        LogLevel.INFO,
+        user_id=user.id,
+    )
+    return BulkRecordsResponse(updated=updated, errors=errors)
 
 
 @router_records.patch("/{record_id}", response_model=DNSRecordResponse)

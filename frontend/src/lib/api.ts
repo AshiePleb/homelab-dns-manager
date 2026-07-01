@@ -41,10 +41,10 @@ class ApiClient {
     return res.json();
   }
 
-  login(username: string, password: string) {
+  login(username: string, password: string, totp_code?: string) {
     return this.request<{ access_token: string; expires_at?: string }>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, totp_code: totp_code || null }),
     });
   }
 
@@ -93,6 +93,75 @@ class ApiClient {
 
   getDashboardHealth() {
     return this.request<ServiceHealthRow[]>("/dashboard/health");
+  }
+
+  getHealthHistory(hostname?: string, hours = 24) {
+    const params = new URLSearchParams({ hours: String(hours) });
+    if (hostname) params.set("hostname", hostname);
+    return this.request<HealthHistoryPoint[]>(`/dashboard/health/history?${params}`);
+  }
+
+  getPreferences() {
+    return this.request<UserPreferences>("/auth/preferences");
+  }
+
+  updatePreferences(data: Partial<UserPreferences>) {
+    return this.request<UserPreferences>("/auth/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  setup2FA() {
+    return this.request<{ secret: string; provisioning_uri: string }>("/auth/2fa/setup", {
+      method: "POST",
+    });
+  }
+
+  enable2FA(code: string) {
+    return this.request("/auth/2fa/enable", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  disable2FA(code: string, password: string) {
+    return this.request("/auth/2fa/disable", {
+      method: "POST",
+      body: JSON.stringify({ code, password }),
+    });
+  }
+
+  async exportBackup(): Promise<Blob> {
+    const headers: Record<string, string> = {};
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    const res = await fetch(`${API_BASE}/backup/export`, { headers });
+    if (!res.ok) throw new Error("Backup export failed");
+    return res.blob();
+  }
+
+  async importBackup(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    const headers: Record<string, string> = {};
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    const res = await fetch(`${API_BASE}/backup/restore`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(typeof err.detail === "string" ? err.detail : "Restore failed");
+    }
+    return res.json() as Promise<{ message: string }>;
+  }
+
+  bulkRecords(record_ids: number[], action: string) {
+    return this.request<{ updated: number; errors: string[] }>("/records/bulk", {
+      method: "POST",
+      body: JSON.stringify({ record_ids, action }),
+    });
   }
 
   getRecentActivity(limit = 10) {
@@ -311,7 +380,26 @@ export interface User {
   role: "admin" | "operator" | "viewer";
   is_active: boolean;
   must_change_credentials: boolean;
+  totp_enabled?: boolean;
+  preferences?: UserPreferences;
   created_at: string;
+}
+
+export interface UserPreferences {
+  theme: string;
+  font_size: number;
+  reduce_motion: boolean;
+  colorblind_mode: boolean;
+}
+
+export interface HealthHistoryPoint {
+  hostname: string;
+  overall: string;
+  dns_ok: boolean;
+  port_ok: boolean;
+  https_ok: boolean;
+  ssl_days_remaining: number | null;
+  checked_at: string;
 }
 
 export interface DashboardStats {

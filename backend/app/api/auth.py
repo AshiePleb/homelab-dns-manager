@@ -14,6 +14,8 @@ from app.services.session_service import (
     revoke_session,
     revoke_user_sessions,
 )
+from app.services.totp_service import read_totp_secret, verify_totp
+from app.api.preferences import build_user_response
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
@@ -41,6 +43,19 @@ async def login(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+
+    if user.totp_enabled:
+        secret = read_totp_secret(user.totp_secret)
+        if not data.totp_code:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="2FA code required",
+            )
+        if not secret or not verify_totp(secret, data.totp_code):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid 2FA code",
+            )
 
     if password_needs_rehash(user.hashed_password):
         user.hashed_password = hash_password(data.password)
@@ -72,7 +87,7 @@ async def logout(
 
 @router.get("/me", response_model=UserResponse)
 async def me(user: User = Depends(get_current_user)):
-    return user
+    return build_user_response(user)
 
 
 @router.post("/onboarding", response_model=UserResponse)

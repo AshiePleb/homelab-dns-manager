@@ -11,11 +11,10 @@ import {
   Layers,
   Shield,
 } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/auth";
-import { ThemePicker } from "@/components/theme-picker";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
@@ -109,7 +108,13 @@ export function Layout() {
           <h1 className="text-sm font-medium text-muted-foreground flex-1">
             Self-hosted DNS & Homelab Dashboard
           </h1>
-          <ThemePicker />
+          <Link
+            to="/settings"
+            state={{ tab: "appearance" }}
+            className="text-xs text-muted-foreground hover:text-primary hidden sm:inline"
+          >
+            Appearance
+          </Link>
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 scrollbar-thin">
           <Outlet />

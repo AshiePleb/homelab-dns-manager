@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { api, AppSettings, NotificationSettingsView, User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +10,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { DataTable, TableRow, TableCell } from "@/components/data-table";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuth } from "@/context/auth";
-import { useTheme } from "@/context/theme";
-import { ThemePicker } from "@/components/theme-picker";
-import { ThemeId, normalizeThemeId, applyThemeClass } from "@/lib/themes";
+import { AppearanceSettings } from "@/components/appearance-settings";
+import { SystemSettings } from "@/components/system-settings";
 
-type TabId = "profile" | "general" | "cloudflare" | "notifications" | "users";
+type TabId = "profile" | "appearance" | "general" | "cloudflare" | "notifications" | "users" | "system";
 
 const TIMEZONES = [
   { value: "UTC", label: "UTC" },
@@ -78,7 +78,6 @@ const selectClass =
 
 export function SettingsPage() {
   const { isAdmin, user, refreshUser } = useAuth();
-  const { setTheme } = useTheme();
   const [tab, setTab] = useState<TabId>("profile");
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -88,7 +87,6 @@ export function SettingsPage() {
   const [general, setGeneral] = useState({
     timezone: "UTC",
     refresh_interval: 5,
-    theme: "midnight" as ThemeId,
     default_zone: "" as string | null,
   });
   const [zoneNames, setZoneNames] = useState<string[]>([]);
@@ -114,6 +112,13 @@ export function SettingsPage() {
   });
   const [passwords, setPasswords] = useState({ current: "", new: "" });
 
+  const location = useLocation();
+
+  useEffect(() => {
+    const requested = (location.state as { tab?: TabId } | null)?.tab;
+    if (requested) setTab(requested);
+  }, [location.state]);
+
   const [userPanel, setUserPanel] = useState<"closed" | "create" | "edit">("closed");
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userForm, setUserForm] = useState({
@@ -127,10 +132,12 @@ export function SettingsPage() {
 
   const tabs: { id: TabId; label: string; adminOnly?: boolean }[] = [
     { id: "profile", label: "Profile" },
-    { id: "general", label: "General" },
+    { id: "appearance", label: "Appearance" },
+    { id: "general", label: "General", adminOnly: true },
     { id: "cloudflare", label: "Cloudflare" },
     { id: "notifications", label: "Notifications", adminOnly: true },
     { id: "users", label: "Users", adminOnly: true },
+    { id: "system", label: "System", adminOnly: true },
   ];
 
   const visibleTabs = tabs.filter((t) => !t.adminOnly || isAdmin);
@@ -166,8 +173,8 @@ export function SettingsPage() {
     api.getSettings().then((s) => {
       setSettings(s);
       setGeneral({
-        ...s.general,
-        theme: normalizeThemeId(s.general.theme),
+        timezone: s.general.timezone,
+        refresh_interval: s.general.refresh_interval,
         default_zone: s.general.default_zone || s.default_zone || "",
       });
     });
@@ -192,10 +199,7 @@ export function SettingsPage() {
   const saveGeneral = async () => {
     setSaving("general");
     try {
-      const themeId = normalizeThemeId(general.theme);
-      applyThemeClass(themeId);
-      await api.updateGeneral({ ...general, theme: themeId });
-      setTheme(themeId);
+      await api.updateGeneral({ ...general, theme: "midnight" });
       showMsg("General settings saved");
     } catch (e) {
       showMsg(e instanceof Error ? e.message : "Failed to save general settings");
@@ -515,11 +519,13 @@ export function SettingsPage() {
         </div>
       )}
 
-      {tab === "general" && (
+      {tab === "appearance" && <AppearanceSettings onMessage={showMsg} />}
+
+      {tab === "general" && isAdmin && (
         <Card>
           <CardHeader>
             <CardTitle>General</CardTitle>
-            <CardDescription>Timezone, theme, DDNS interval, and default domain for new services</CardDescription>
+            <CardDescription>Timezone, DDNS interval, and default domain for new services</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
@@ -541,21 +547,6 @@ export function SettingsPage() {
                   )}
                 </select>
                 <p className="text-xs text-muted-foreground">Used for timestamps across the dashboard</p>
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Theme</Label>
-                <ThemePicker
-                  variant="settings"
-                  value={normalizeThemeId(general.theme)}
-                  onChange={(id) => {
-                    setGeneral({ ...general, theme: id });
-                    setTheme(id);
-                  }}
-                  disabled={!isAdmin}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Also change from the palette icon in the header. Saves for all users when you&apos;re admin.
-                </p>
               </div>
               <div className="space-y-2">
                 <Label>DDNS interval (minutes)</Label>
@@ -979,6 +970,8 @@ export function SettingsPage() {
           </div>
         </div>
       )}
+
+      {tab === "system" && isAdmin && <SystemSettings onMessage={showMsg} />}
     </div>
   );
 }

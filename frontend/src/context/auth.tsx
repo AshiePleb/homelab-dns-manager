@@ -4,7 +4,7 @@ import { api, User } from "@/lib/api";
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, totp_code?: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   isOperator: boolean;
@@ -33,8 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (username: string, password: string) => {
-    const { access_token } = await api.login(username, password);
+  const login = async (username: string, password: string, totp_code?: string) => {
+    const { access_token } = await api.login(username, password, totp_code);
     api.setToken(access_token);
     const me = await api.me();
     setUser(me);

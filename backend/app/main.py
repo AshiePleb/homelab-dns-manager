@@ -22,6 +22,7 @@ from app.services.bootstrap_service import run_startup_bootstrap
 from app.services.cert_monitor import check_certificate_expiry
 from app.services.settings_service import get_setting, set_setting
 from app.services.caddy_service import write_all_sites, reload_caddy
+from app.services.health_history_service import record_health_snapshots
 from app.services.session_service import cleanup_expired_sessions, purge_old_sessions
 
 from app.api.auth import router as auth_router
@@ -39,7 +40,8 @@ from app.api.docker import router as docker_router
 from app.api.settings import router as settings_router
 from app.api.notifications import router as notifications_router
 from app.api.services import router as services_router
-from app.api.caddy import router as caddy_router
+from app.api.preferences import router as preferences_router
+from app.api.backup import router as backup_router
 
 settings = get_settings()
 scheduler = AsyncIOScheduler()
@@ -95,6 +97,15 @@ async def sync_caddy_config():
         reload_caddy()
 
 
+async def health_history_job():
+    async with AsyncSessionLocal() as db:
+        try:
+            await record_health_snapshots(db)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
+
 async def session_cleanup_job():
     async with AsyncSessionLocal() as db:
         try:
@@ -130,6 +141,7 @@ async def lifespan(app: FastAPI):
     interval = int(await _get_interval())
     scheduler.add_job(ddns_job, "interval", minutes=interval, id="ddns_check")
     scheduler.add_job(session_cleanup_job, "interval", hours=1, id="session_cleanup")
+    scheduler.add_job(health_history_job, "interval", minutes=15, id="health_history", next_run_time=datetime.now())
     scheduler.add_job(ssl_expiry_job, "interval", hours=12, id="ssl_expiry_check", next_run_time=datetime.now())
     scheduler.start()
     yield
@@ -172,6 +184,8 @@ app.include_router(settings_router, prefix=API_PREFIX)
 app.include_router(notifications_router, prefix=API_PREFIX)
 app.include_router(services_router, prefix=API_PREFIX)
 app.include_router(caddy_router, prefix=API_PREFIX)
+app.include_router(preferences_router, prefix=API_PREFIX)
+app.include_router(backup_router, prefix=API_PREFIX)
 
 
 @app.get(f"{API_PREFIX}/health")

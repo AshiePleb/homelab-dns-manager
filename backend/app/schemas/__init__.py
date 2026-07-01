@@ -13,6 +13,7 @@ class Token(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+    totp_code: str | None = None
 
 
 class UserBase(BaseModel):
@@ -47,11 +48,41 @@ class OnboardingRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class UserPreferences(BaseModel):
+    theme: str = "midnight"
+    font_size: int = Field(default=100, ge=90, le=130)
+    reduce_motion: bool = False
+    colorblind_mode: bool = False
+
+
+class UserPreferencesUpdate(BaseModel):
+    theme: str | None = None
+    font_size: int | None = Field(default=None, ge=90, le=130)
+    reduce_motion: bool | None = None
+    colorblind_mode: bool | None = None
+
+
+class TotpSetupResponse(BaseModel):
+    secret: str
+    provisioning_uri: str
+
+
+class TotpEnableRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class TotpDisableRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+    password: str
+
+
 class UserResponse(UserBase):
     id: int
     name: str | None = None
     is_active: bool
     must_change_credentials: bool = False
+    totp_enabled: bool = False
+    preferences: UserPreferences | None = None
     created_at: datetime
 
     class Config:
@@ -399,3 +430,23 @@ class CaddyHostResponse(BaseModel):
     ssl_message: str
     has_cert: bool
     updated_at: datetime
+
+
+class BulkRecordsRequest(BaseModel):
+    record_ids: list[int] = Field(min_length=1)
+    action: str = Field(description="enable_ddns | disable_ddns | force_update | delete")
+
+
+class BulkRecordsResponse(BaseModel):
+    updated: int
+    errors: list[str] = []
+
+
+class HealthHistoryPoint(BaseModel):
+    hostname: str
+    overall: str
+    dns_ok: bool
+    port_ok: bool
+    https_ok: bool
+    ssl_days_remaining: int | None
+    checked_at: datetime

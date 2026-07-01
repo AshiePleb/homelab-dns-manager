@@ -13,7 +13,7 @@ import {
   Server,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api, DashboardStats, ActivityLog, DDNSStatus, ServiceHealthRow } from "@/lib/api";
+import { api, DashboardStats, ActivityLog, DDNSStatus, ServiceHealthRow, HealthHistoryPoint } from "@/lib/api";
 import { StatCard } from "@/components/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,7 @@ export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [ddns, setDdns] = useState<DDNSStatus | null>(null);
   const [health, setHealth] = useState<ServiceHealthRow[]>([]);
+  const [healthHistory, setHealthHistory] = useState<HealthHistoryPoint[]>([]);
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [healthLoading, setHealthLoading] = useState(true);
@@ -76,8 +77,12 @@ export function DashboardPage() {
   const loadHealth = useCallback(async () => {
     setHealthLoading(true);
     try {
-      const rows = await api.getDashboardHealth();
+      const [rows, history] = await Promise.all([
+        api.getDashboardHealth(),
+        api.getHealthHistory(undefined, 24),
+      ]);
       setHealth(rows);
+      setHealthHistory(history);
     } finally {
       setHealthLoading(false);
     }
@@ -317,6 +322,45 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {healthHistory.length > 0 && (
+        <div className="rounded-lg border border-border bg-card">
+          <div className="border-b border-border px-6 py-4">
+            <h3 className="font-semibold">Health history (24h)</h3>
+            <p className="text-xs text-muted-foreground mt-1">Snapshots every 15 minutes — retained 30 days</p>
+          </div>
+          <div className="overflow-x-auto max-h-56 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-left text-xs text-muted-foreground">
+                  <th className="px-6 py-2 font-medium">Time</th>
+                  <th className="px-4 py-2 font-medium">Service</th>
+                  <th className="px-4 py-2 font-medium">DNS</th>
+                  <th className="px-4 py-2 font-medium">HTTPS</th>
+                  <th className="px-4 py-2 font-medium">Port</th>
+                  <th className="px-6 py-2 font-medium">Overall</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {[...healthHistory].reverse().slice(0, 40).map((h, i) => (
+                  <tr key={`${h.hostname}-${h.checked_at}-${i}`}>
+                    <td className="px-6 py-2 text-xs text-muted-foreground">{formatRelative(h.checked_at)}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{h.hostname}</td>
+                    <td className="px-4 py-2">{h.dns_ok ? "✓" : "✗"}</td>
+                    <td className="px-4 py-2">{h.https_ok ? "✓" : "✗"}</td>
+                    <td className="px-4 py-2">{h.port_ok ? "✓" : "✗"}</td>
+                    <td className="px-6 py-2">
+                      <Badge variant={overallVariant[h.overall as keyof typeof overallVariant] || "secondary"}>
+                        {h.overall}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

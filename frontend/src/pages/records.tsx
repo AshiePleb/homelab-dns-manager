@@ -33,6 +33,8 @@ export function RecordsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [historyId, setHistoryId] = useState<number | null>(null);
   const [history, setHistory] = useState<{ old_content: string | null; new_content: string; change_reason: string; created_at: string }[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const { isOperator } = useAuth();
 
   const [form, setForm] = useState({
@@ -96,6 +98,37 @@ export function RecordsPage() {
   const showHistory = async (id: number) => {
     setHistoryId(id);
     setHistory(await api.getRecordHistory(id));
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === records.length) setSelected(new Set());
+    else setSelected(new Set(records.map((r) => r.id)));
+  };
+
+  const runBulk = async (action: string) => {
+    if (!selected.size) return;
+    const label = action.replace("_", " ");
+    if (!confirm(`${label} on ${selected.size} record(s)?`)) return;
+    setBulkBusy(true);
+    try {
+      const res = await api.bulkRecords([...selected], action);
+      if (res.errors.length) alert(`${res.updated} updated.\n\n${res.errors.join("\n")}`);
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Bulk action failed");
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   return (
@@ -175,6 +208,24 @@ export function RecordsPage() {
         </form>
       )}
 
+      {isOperator && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
+          <span className="font-medium">{selected.size} selected</span>
+          <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => runBulk("enable_ddns")}>
+            Enable DDNS
+          </Button>
+          <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => runBulk("disable_ddns")}>
+            Disable DDNS
+          </Button>
+          <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => runBulk("force_update")}>
+            Force update
+          </Button>
+          <Button size="sm" variant="destructive" disabled={bulkBusy} onClick={() => runBulk("delete")}>
+            Delete
+          </Button>
+        </div>
+      )}
+
       {historyId !== null && (
         <div className="rounded-lg border border-border bg-card p-6">
           <div className="flex justify-between mb-4">
@@ -203,8 +254,16 @@ export function RecordsPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       ) : (
-        <DataTable
+        <>
+          {isOperator && records.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+              <input type="checkbox" checked={selected.size === records.length} onChange={toggleAll} />
+              Select all
+            </label>
+          )}
+          <DataTable
           columns={[
+            ...(isOperator ? [{ key: "sel", label: "", className: "w-10" }] : []),
             { key: "hostname", label: "Hostname" },
             { key: "internal", label: "Internal target" },
             { key: "dns", label: "Public IP / DDNS" },
@@ -218,6 +277,16 @@ export function RecordsPage() {
         >
           {records.map((r) => (
             <TableRow key={r.id}>
+              {isOperator && (
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(r.id)}
+                    onChange={() => toggleSelect(r.id)}
+                    aria-label={`Select ${r.hostname}`}
+                  />
+                </TableCell>
+              )}
               <TableCell className="font-mono text-sm text-primary">{r.hostname}</TableCell>
               <TableCell className="font-mono text-sm">
                 {r.forward_host && r.forward_port != null ? (
@@ -279,6 +348,7 @@ export function RecordsPage() {
             </TableRow>
           ))}
         </DataTable>
+        </>
       )}
     </div>
   );

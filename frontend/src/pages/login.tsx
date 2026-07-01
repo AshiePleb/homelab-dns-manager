@@ -10,6 +10,8 @@ import { Server } from "lucide-react";
 export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [needs2fa, setNeeds2fa] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -20,10 +22,16 @@ export function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(username, password);
+      await login(username, password, needs2fa ? totpCode : undefined);
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const msg = err instanceof Error ? err.message : "Login failed";
+      if (msg.includes("2FA")) {
+        setNeeds2fa(true);
+        setError("Enter the 6-digit code from your authenticator app");
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -49,6 +57,7 @@ export function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 autoFocus
+                autoComplete="username"
               />
             </div>
             <div className="space-y-2">
@@ -59,11 +68,26 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {needs2fa && (
+              <div className="space-y-2">
+                <Label htmlFor="totp">Authenticator code</Label>
+                <Input
+                  id="totp"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  placeholder="000000"
+                  required
+                />
+              </div>
+            )}
+            {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? "Signing in..." : needs2fa ? "Verify & sign in" : "Sign In"}
             </Button>
           </form>
         </CardContent>
