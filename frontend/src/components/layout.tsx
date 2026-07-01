@@ -15,7 +15,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/auth";
-import { Button } from "@/components/ui/button";
+import { VersionBadge } from "@/components/version-badge";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -115,6 +115,7 @@ export function Layout() {
           >
             Appearance
           </Link>
+          <VersionBadge />
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 scrollbar-thin">
           <Outlet />

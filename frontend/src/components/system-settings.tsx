@@ -45,7 +45,7 @@ export function SystemSettings({ onMessage }: { onMessage: (msg: string) => void
       <CardHeader>
         <CardTitle>Backup & restore</CardTitle>
         <CardDescription>
-          Export database, Caddy config, and certificates. Admin only — restore replaces server data.
+          Export database, Caddy config, and certificates. Restore replaces server data.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-3">

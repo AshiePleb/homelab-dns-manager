@@ -1,21 +1,41 @@
+# Match .gitignore — only backend + frontend source belong in the image
+
+# Git & CI
 .git
+.github
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Python / Node dev
 .venv
 venv
 **/__pycache__
 **/*.pyc
 node_modules
 frontend/dist
+
+# Runtime data
 data
 dist
-.env
-.env.*
-!.env.example
 *.db
 *.log
 *.zip
+
+# IDE
 .cursor
 .idea
 .vscode
-README.md
+.DS_Store
+
+# Not needed inside the image
+install
+scripts
+*.md
+LICENSE
+docker-compose.yml
+docker-compose.build.yml
 PUBLISHING.md
-install/
+DOCKERHUB.md

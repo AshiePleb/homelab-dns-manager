@@ -10,6 +10,14 @@ RUN npm run build
 FROM python:3.12-slim AS backend
 WORKDIR /app
 
+ARG APP_VERSION=dev
+ARG BUILD_TIME=
+ARG DOCKER_IMAGE_REPO=ashiepleb/homelab-dns-manager
+ENV APP_VERSION=${APP_VERSION}
+ENV BUILD_TIME=${BUILD_TIME}
+ENV DOCKER_IMAGE_REPO=${DOCKER_IMAGE_REPO}
+LABEL org.opencontainers.image.version="${APP_VERSION}"
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*

@@ -450,3 +450,14 @@ class HealthHistoryPoint(BaseModel):
     https_ok: bool
     ssl_days_remaining: int | None
     checked_at: datetime
+
+
+class VersionStatusResponse(BaseModel):
+    version: str
+    build_time: str | None = None
+    image: str
+    docker_hub_repo: str
+    latest_tag: str = "latest"
+    latest_published_at: str | None = None
+    update_available: bool = False
+    check_ok: bool = False

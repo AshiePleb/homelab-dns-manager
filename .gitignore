@@ -5,27 +5,32 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
+!install/.env.example
 
 # Node
 node_modules/
-dist/
+frontend/dist/
 *.local
 
-# Data
+# Data & runtime
 data/
 *.db
 
-# IDE
+# IDE & OS
 .idea/
 .vscode/
+.cursor/
 *.swp
 .DS_Store
 
-# Build
-*.log
-
-# Deploy packages
+# Build artifacts
 dist/
+*.log
+*.zip
 
-# Frontend build output (built inside Docker image)
-frontend/dist/
+# Maintainer-only (keep locally; not for the public repo)
+PUBLISHING.md
+DOCKERHUB.md
+scripts/

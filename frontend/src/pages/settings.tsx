@@ -12,6 +12,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { useAuth } from "@/context/auth";
 import { AppearanceSettings } from "@/components/appearance-settings";
 import { SystemSettings } from "@/components/system-settings";
+import { TwoFactorSettings } from "@/components/two-factor-settings";
 
 type TabId = "profile" | "appearance" | "general" | "cloudflare" | "notifications" | "users" | "system";
 
@@ -516,6 +517,8 @@ export function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+
+          <TwoFactorSettings onMessage={showMsg} />
         </div>
       )}
 

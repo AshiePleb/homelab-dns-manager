@@ -164,6 +164,10 @@ class ApiClient {
     });
   }
 
+  getVersionStatus() {
+    return this.request<VersionStatus>("/system/version");
+  }
+
   getRecentActivity(limit = 10) {
     return this.request<ActivityLog[]>(`/dashboard/activity?limit=${limit}`);
   }
@@ -400,6 +404,17 @@ export interface HealthHistoryPoint {
   https_ok: boolean;
   ssl_days_remaining: number | null;
   checked_at: string;
+}
+
+export interface VersionStatus {
+  version: string;
+  build_time: string | null;
+  image: string;
+  docker_hub_repo: string;
+  latest_tag: string;
+  latest_published_at: string | null;
+  update_available: boolean;
+  check_ok: boolean;
 }
 
 export interface DashboardStats {
