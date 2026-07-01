@@ -3,7 +3,7 @@ import { Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/theme";
-import { THEMES, ThemeId } from "@/lib/themes";
+import { THEMES, ThemeGroup, ThemeId } from "@/lib/themes";
 
 interface ThemePickerProps {
   variant?: "header" | "settings";
@@ -11,6 +11,14 @@ interface ThemePickerProps {
   value?: ThemeId;
   onChange?: (theme: ThemeId) => void;
 }
+
+const GROUP_LABELS: Record<ThemeGroup, string> = {
+  dark: "Dark",
+  light: "Light",
+  accessibility: "Accessibility",
+};
+
+const GROUP_ORDER: ThemeGroup[] = ["dark", "light", "accessibility"];
 
 export function ThemePicker({ variant = "header", disabled, value, onChange }: ThemePickerProps) {
   const { theme, setTheme } = useTheme();
@@ -32,14 +40,18 @@ export function ThemePicker({ variant = "header", disabled, value, onChange }: T
     setOpen(false);
   };
 
-  const darkThemes = THEMES.filter((t) => t.group === "dark");
-  const lightThemes = THEMES.filter((t) => t.group === "light");
+  const groups = GROUP_ORDER.map((group) => ({
+    group,
+    label: GROUP_LABELS[group],
+    themes: THEMES.filter((t) => t.group === group),
+  }));
 
   if (variant === "settings") {
     return (
-      <div className="space-y-4">
-        <ThemeGroup label="Dark" themes={darkThemes} active={active} onPick={pick} disabled={disabled} />
-        <ThemeGroup label="Light" themes={lightThemes} active={active} onPick={pick} disabled={disabled} />
+      <div className="space-y-5">
+        {groups.map(({ group, label, themes }) => (
+          <ThemeGroup key={group} label={label} themes={themes} active={active} onPick={pick} disabled={disabled} />
+        ))}
       </div>
     );
   }
@@ -52,14 +64,21 @@ export function ThemePicker({ variant = "header", disabled, value, onChange }: T
         onClick={() => setOpen(!open)}
         title="Choose theme"
         type="button"
+        aria-expanded={open}
+        aria-haspopup="listbox"
       >
         <Palette className="h-4 w-4" />
       </Button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-lg border border-border bg-card p-3 shadow-lg">
+        <div
+          className="absolute right-0 top-full z-50 mt-2 w-72 max-h-[min(70vh,28rem)] overflow-y-auto rounded-lg border border-border bg-card p-3 shadow-lg scrollbar-thin"
+          role="listbox"
+          aria-label="Theme options"
+        >
           <p className="text-xs font-medium text-muted-foreground mb-2 px-1">Theme</p>
-          <ThemeGroup label="Dark" themes={darkThemes} active={active} onPick={pick} compact />
-          <ThemeGroup label="Light" themes={lightThemes} active={active} onPick={pick} compact />
+          {groups.map(({ group, label, themes }) => (
+            <ThemeGroup key={group} label={label} themes={themes} active={active} onPick={pick} compact />
+          ))}
         </div>
       )}
     </div>
@@ -82,14 +101,16 @@ function ThemeGroup({
   compact?: boolean;
 }) {
   return (
-    <div className={cn(compact ? "mb-2 last:mb-0" : "mb-4 last:mb-0")}>
+    <div className={cn(compact ? "mb-3 last:mb-0" : "mb-4 last:mb-0")}>
       <p className="text-xs text-muted-foreground mb-2">{label}</p>
-      <div className={cn("grid gap-2", compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4")}>
+      <div className={cn("grid gap-2", compact ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3")}>
         {themes.map((t) => (
           <button
             key={t.id}
             type="button"
             disabled={disabled}
+            role="option"
+            aria-selected={active === t.id}
             onClick={(e) => {
               e.stopPropagation();
               onPick(t.id);
@@ -105,8 +126,14 @@ function ThemeGroup({
               style={{
                 background: `linear-gradient(135deg, hsl(${t.preview.bg}) 50%, hsl(${t.preview.accent}) 50%)`,
               }}
+              aria-hidden
             />
-            <span className="font-medium truncate">{t.label}</span>
+            <span className="min-w-0">
+              <span className="font-medium block truncate">{t.label}</span>
+              {t.description && !compact && (
+                <span className="text-[10px] text-muted-foreground line-clamp-2">{t.description}</span>
+              )}
+            </span>
           </button>
         ))}
       </div>

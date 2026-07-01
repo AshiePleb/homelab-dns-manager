@@ -183,6 +183,195 @@ html.theme-frost {
   --warning: 38 85% 42%;
 }
 
+html.theme-slate {
+  --background: 220 15% 8%;
+  --foreground: 210 20% 96%;
+  --card: 220 14% 11%;
+  --card-foreground: 210 20% 96%;
+  --primary: 210 40% 55%;
+  --primary-foreground: 220 20% 8%;
+  --secondary: 220 12% 15%;
+  --secondary-foreground: 210 20% 96%;
+  --muted: 220 12% 15%;
+  --muted-foreground: 215 12% 58%;
+  --accent: 220 12% 17%;
+  --accent-foreground: 210 20% 96%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 10% 20%;
+  --input: 220 10% 20%;
+  --ring: 210 40% 55%;
+  --sidebar: 220 15% 9%;
+  --sidebar-foreground: 210 18% 90%;
+  --sidebar-accent: 220 12% 15%;
+  --success: 142 60% 42%;
+  --warning: 38 92% 50%;
+}
+
+html.theme-ocean {
+  --background: 215 45% 7%;
+  --foreground: 200 30% 96%;
+  --card: 215 40% 10%;
+  --card-foreground: 200 30% 96%;
+  --primary: 200 90% 50%;
+  --primary-foreground: 215 50% 8%;
+  --secondary: 215 35% 14%;
+  --secondary-foreground: 200 30% 96%;
+  --muted: 215 30% 14%;
+  --muted-foreground: 205 18% 58%;
+  --accent: 215 32% 16%;
+  --accent-foreground: 200 30% 96%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 215 28% 18%;
+  --input: 215 28% 18%;
+  --ring: 200 90% 50%;
+  --sidebar: 215 45% 8%;
+  --sidebar-foreground: 200 25% 90%;
+  --sidebar-accent: 215 35% 14%;
+  --success: 160 65% 42%;
+  --warning: 45 95% 52%;
+}
+
+html.theme-paper {
+  --background: 45 20% 99%;
+  --foreground: 220 25% 10%;
+  --card: 45 25% 100%;
+  --card-foreground: 220 25% 10%;
+  --primary: 220 50% 40%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 45 15% 95%;
+  --secondary-foreground: 220 25% 10%;
+  --muted: 45 12% 94%;
+  --muted-foreground: 220 12% 42%;
+  --accent: 45 18% 92%;
+  --accent-foreground: 220 25% 10%;
+  --destructive: 0 72% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 45 12% 88%;
+  --input: 45 12% 88%;
+  --ring: 220 50% 40%;
+  --sidebar: 45 18% 97%;
+  --sidebar-foreground: 220 22% 15%;
+  --sidebar-accent: 45 15% 93%;
+  --success: 142 55% 32%;
+  --warning: 38 85% 40%;
+}
+
+html.theme-mint {
+  --background: 150 20% 97%;
+  --foreground: 155 30% 10%;
+  --card: 150 22% 99%;
+  --card-foreground: 155 30% 10%;
+  --primary: 155 50% 38%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 150 18% 93%;
+  --secondary-foreground: 155 30% 10%;
+  --muted: 150 15% 92%;
+  --muted-foreground: 155 12% 42%;
+  --accent: 150 20% 90%;
+  --accent-foreground: 155 30% 10%;
+  --destructive: 0 72% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 150 14% 86%;
+  --input: 150 14% 86%;
+  --ring: 155 50% 38%;
+  --sidebar: 150 18% 95%;
+  --sidebar-foreground: 155 25% 14%;
+  --sidebar-accent: 150 16% 91%;
+  --success: 142 60% 32%;
+  --warning: 38 85% 40%;
+}
+
+/* Accessibility — high contrast & readable */
+html.theme-contrast-dark {
+  --background: 0 0% 0%;
+  --foreground: 0 0% 100%;
+  --card: 0 0% 5%;
+  --card-foreground: 0 0% 100%;
+  --primary: 55 100% 50%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 12%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 85%;
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 100% 60%;
+  --destructive-foreground: 0 0% 0%;
+  --border: 0 0% 100%;
+  --input: 0 0% 100%;
+  --ring: 55 100% 50%;
+  --sidebar: 0 0% 3%;
+  --sidebar-foreground: 0 0% 100%;
+  --sidebar-accent: 0 0% 12%;
+  --success: 120 100% 45%;
+  --warning: 45 100% 50%;
+  --radius: 0.25rem;
+  font-size: 17px;
+}
+
+html.theme-contrast-light {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 0%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 0%;
+  --primary: 240 100% 40%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 94%;
+  --secondary-foreground: 0 0% 0%;
+  --muted: 0 0% 94%;
+  --muted-foreground: 0 0% 25%;
+  --accent: 0 0% 92%;
+  --accent-foreground: 0 0% 0%;
+  --destructive: 0 100% 40%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 0%;
+  --input: 0 0% 0%;
+  --ring: 240 100% 40%;
+  --sidebar: 0 0% 97%;
+  --sidebar-foreground: 0 0% 0%;
+  --sidebar-accent: 0 0% 92%;
+  --success: 120 100% 28%;
+  --warning: 35 100% 35%;
+  --radius: 0.25rem;
+  font-size: 17px;
+}
+
+html.theme-readable {
+  --background: 45 15% 96%;
+  --foreground: 220 30% 8%;
+  --card: 45 20% 99%;
+  --card-foreground: 220 30% 8%;
+  --primary: 215 70% 35%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 45 12% 92%;
+  --secondary-foreground: 220 30% 8%;
+  --muted: 45 10% 91%;
+  --muted-foreground: 220 15% 30%;
+  --accent: 45 14% 89%;
+  --accent-foreground: 220 30% 8%;
+  --destructive: 0 75% 42%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 15% 75%;
+  --input: 220 15% 75%;
+  --ring: 215 70% 35%;
+  --sidebar: 45 14% 94%;
+  --sidebar-foreground: 220 28% 10%;
+  --sidebar-accent: 45 12% 90%;
+  --success: 142 55% 30%;
+  --warning: 38 90% 38%;
+  --radius: 0.375rem;
+  font-size: 18px;
+}
+
+html.theme-readable body,
+html.theme-contrast-dark body,
+html.theme-contrast-light body {
+  line-height: 1.65;
+  letter-spacing: 0.02em;
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -191,6 +380,28 @@ html.theme-frost {
   body {
     @apply bg-background text-foreground antialiased;
     font-family: "Inter", system-ui, -apple-system, sans-serif;
+  }
+
+  html[class*="theme-"] :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  html.theme-contrast-dark :focus-visible,
+  html.theme-contrast-light :focus-visible,
+  html.theme-readable :focus-visible {
+    outline-width: 3px;
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
