@@ -40,6 +40,7 @@ from app.api.docker import router as docker_router
 from app.api.settings import router as settings_router
 from app.api.notifications import router as notifications_router
 from app.api.services import router as services_router
+from app.api.caddy import router as caddy_router
 from app.api.preferences import router as preferences_router
 from app.api.backup import router as backup_router
 
