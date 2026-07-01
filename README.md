@@ -12,7 +12,7 @@
 | **Quick install** | [`install/docker-compose.yml`](install/docker-compose.yml) + [`.env.example`](install/.env.example) |
 | **Docker Hub overview** | [DOCKERHUB.md](DOCKERHUB.md) (copy for Hub listing) |
 
-Add a service in one step — e.g. subdomain `git` + target `10.10.10.3:3000` → `git.example.com` with DDNS and HTTPS.
+Add a service in one step — e.g. subdomain `home` + target `10.10.10.1:8080` → `home.example.com` with DDNS and HTTPS.
 
 **Install path used in this guide:** `/opt/homelab-dns-manager`
 

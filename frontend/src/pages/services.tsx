@@ -79,6 +79,11 @@ export function ServicesPage() {
 
   const baseDomain = form.base_domain || template?.base_domain || "";
 
+  const exampleSubdomain = template?.example_subdomain ?? "home";
+  const exampleTarget = template?.example_target ?? "10.10.10.1:8080";
+  const exampleHostname =
+    template?.example_hostname ?? `${exampleSubdomain}.${baseDomain || "example.com"}`;
+
   return (
     <div className="space-y-6">
       <div>
@@ -99,9 +104,9 @@ export function ServicesPage() {
               New service
             </CardTitle>
             <CardDescription>
-              Example: <code className="text-primary">home</code> +{" "}
-              <code className="text-primary">10.10.10.1:8080</code> →{" "}
-              <code className="text-primary">home.{baseDomain || "example.com"}</code>
+              Example: <code className="text-primary">{exampleSubdomain}</code> +{" "}
+              <code className="text-primary">{exampleTarget}</code> →{" "}
+              <code className="text-primary">{exampleHostname}</code>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -133,7 +138,7 @@ export function ServicesPage() {
                     <Input
                       value={form.subdomain}
                       onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
-                      placeholder="home"
+                      placeholder={exampleSubdomain}
                       className="rounded-r-none"
                       required
                     />
@@ -151,7 +156,7 @@ export function ServicesPage() {
                         setForm({ ...form, target: e.target.value });
                         setPortStatus(null);
                       }}
-                      placeholder="10.10.10.1:8080"
+                      placeholder={exampleTarget}
                       className="font-mono"
                       required
                     />
@@ -187,7 +192,7 @@ export function ServicesPage() {
                   <Globe className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-primary">{previewHostname}</span>
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  <span>{form.target || "10.10.10.1:port"}</span>
+                  <span>{form.target || `${exampleTarget.split(":")[0]}:port`}</span>
                   <span className="text-muted-foreground">(via Caddy)</span>
                 </div>
               </div>
