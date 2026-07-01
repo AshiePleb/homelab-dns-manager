@@ -3,6 +3,7 @@ import { Download, Upload } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { VersionSettings } from "@/components/version-settings";
 
 export function SystemSettings({ onMessage }: { onMessage: (msg: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -41,38 +42,42 @@ export function SystemSettings({ onMessage }: { onMessage: (msg: string) => void
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Backup & restore</CardTitle>
-        <CardDescription>
-          Export database, Caddy config, and certificates. Restore replaces server data.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap gap-3">
-        <Button type="button" onClick={exportBackup} disabled={busy !== null}>
-          <Download className="h-4 w-4 mr-2" />
-          {busy === "export" ? "Exporting…" : "Download backup"}
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".zip"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void importBackup(f);
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy !== null}
-          onClick={() => fileRef.current?.click()}
-        >
-          <Upload className="h-4 w-4 mr-2" />
-          {busy === "import" ? "Restoring…" : "Restore from backup"}
-        </Button>
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      <VersionSettings />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Backup & restore</CardTitle>
+          <CardDescription>
+            Export database, Caddy config, and certificates. Restore replaces server data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button type="button" onClick={exportBackup} disabled={busy !== null}>
+            <Download className="h-4 w-4 mr-2" />
+            {busy === "export" ? "Exporting…" : "Download backup"}
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".zip"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void importBackup(f);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy !== null}
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            {busy === "import" ? "Restoring…" : "Restore from backup"}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

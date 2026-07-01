@@ -415,6 +415,8 @@ export interface VersionStatus {
   latest_published_at: string | null;
   update_available: boolean;
   check_ok: boolean;
+  image_digest?: string | null;
+  latest_digest?: string | null;
 }
 
 export interface DashboardStats {

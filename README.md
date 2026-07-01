@@ -58,7 +58,7 @@ Open `http://YOUR_SERVER_IP:8000` — default login `admin` / `password` (you wi
 | Dashboard port | `8000` (set `PORT` in `.env`) |
 | Update app | `docker compose pull && docker compose up -d` |
 
-The UI also checks Docker Hub for updates (**Settings → Appearance → App version**).
+The UI also checks Docker Hub for updates (**Settings → System → App version**).
 
 ---
 
@@ -191,12 +191,12 @@ Persistent data lives in the Docker volume `homelab_data` (SQLite DB, Caddyfile,
 ### Settings tabs
 
 - **Profile** — username, display name, email, password, two-factor authentication
-- **Appearance** — theme, accessibility, app version / updates
+- **Appearance** — theme and accessibility options
+- **System** (admin) — app version / updates, backup and restore
 - **General** — timezone, DDNS interval, default domain
 - **Cloudflare** — test connection, rotate API token
 - **Notifications** — Discord webhook, SMTP, alert toggles
 - **Users** (admin) — manage users and roles
-- **System** (admin) — backup and restore
 
 ---
 

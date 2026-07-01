@@ -6,6 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { api, VersionStatus } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
+function formatVersionTag(version: string) {
+  if (!version || version === "dev") return "dev build";
+  if (version === "latest") return "latest";
+  return version.startsWith("v") ? version : `v${version}`;
+}
+
 export function VersionSettings() {
   const [version, setVersion] = useState<VersionStatus | null>(null);
   const [checking, setChecking] = useState(false);
@@ -29,7 +35,8 @@ export function VersionSettings() {
         <div>
           <CardTitle>App version</CardTitle>
           <CardDescription>
-            Compared against the <code className="text-xs">latest</code> tag on Docker Hub.
+            Compares this server&apos;s Docker image digest with the <code className="text-xs">latest</code> tag on
+            Docker Hub.
           </CardDescription>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void loadVersion()} disabled={checking}>
@@ -42,7 +49,7 @@ export function VersionSettings() {
           <>
             <div className="flex flex-wrap items-center gap-2">
               <span>
-                Running <strong>v{version.version}</strong>
+                Running <strong>{formatVersionTag(version.version)}</strong>
               </span>
               {version.update_available ? (
                 <Badge variant="warning">Update available</Badge>

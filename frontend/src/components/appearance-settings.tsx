@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { usePreferences } from "@/context/theme";
-import { VersionSettings } from "@/components/version-settings";
 
 export function AppearanceSettings({ onMessage }: { onMessage: (msg: string) => void }) {
   const { preferences, updatePreferences } = usePreferences();
@@ -101,8 +100,6 @@ export function AppearanceSettings({ onMessage }: { onMessage: (msg: string) => 
           </Button>
         </CardContent>
       </Card>
-
-      <VersionSettings />
     </div>
   );
 }

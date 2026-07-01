@@ -16,12 +16,12 @@ export function VersionBadge() {
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="text-muted-foreground hidden sm:inline" title={status.image}>
-        v{status.version}
+        {status.version === "latest" ? "latest" : status.version.startsWith("v") ? status.version : `v${status.version}`}
       </span>
       {status.update_available && (
         <Link
           to="/settings"
-          state={{ tab: "appearance" }}
+          state={{ tab: "system" }}
           className={cn(
             "inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium",
             "bg-warning/15 text-warning hover:bg-warning/25"

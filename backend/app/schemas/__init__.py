@@ -461,3 +461,5 @@ class VersionStatusResponse(BaseModel):
     latest_published_at: str | None = None
     update_available: bool = False
     check_ok: bool = False
+    image_digest: str | None = None
+    latest_digest: str | None = None
