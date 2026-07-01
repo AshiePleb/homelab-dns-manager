@@ -26,9 +26,13 @@ export function LoginPage() {
       navigate("/");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Login failed";
-      if (msg.includes("2FA")) {
+      if (msg.toLowerCase().includes("2fa")) {
         setNeeds2fa(true);
-        setError("Enter the 6-digit code from your authenticator app");
+        setError(
+          msg.toLowerCase().includes("required")
+            ? "Enter the 6-digit code from your authenticator app"
+            : msg
+        );
       } else {
         setError(msg);
       }

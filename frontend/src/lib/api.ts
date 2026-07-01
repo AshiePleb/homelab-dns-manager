@@ -13,6 +13,14 @@ class ApiClient {
     return this.token;
   }
 
+  private parseErrorMessage(detail: unknown, fallback: string): string {
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((d: { msg?: string }) => d.msg).filter(Boolean).join(", ") || fallback;
+    }
+    return fallback;
+  }
+
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -21,20 +29,17 @@ class ApiClient {
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
 
     const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-    if (res.status === 401) {
-      this.setToken(null);
-      window.location.href = "/login";
-      throw new Error("Unauthorized");
-    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
-      const detail = err.detail;
-      const message =
-        typeof detail === "string"
-          ? detail
-          : Array.isArray(detail)
-            ? detail.map((d: { msg?: string }) => d.msg).join(", ")
-            : "Request failed";
+      const message = this.parseErrorMessage(err.detail, res.statusText || "Request failed");
+
+      if (res.status === 401 && path !== "/auth/login") {
+        this.setToken(null);
+        if (!window.location.pathname.startsWith("/login")) {
+          window.location.href = "/login";
+        }
+      }
+
       throw new Error(message || "Request failed");
     }
     if (res.status === 204) return {} as T;
