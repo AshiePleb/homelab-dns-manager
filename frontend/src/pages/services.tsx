@@ -99,9 +99,9 @@ export function ServicesPage() {
               New service
             </CardTitle>
             <CardDescription>
-              Example: <code className="text-primary">git</code> +{" "}
-              <code className="text-primary">10.10.10.1:3100</code> →{" "}
-              <code className="text-primary">git.{baseDomain || "example.com"}</code>
+              Example: <code className="text-primary">home</code> +{" "}
+              <code className="text-primary">10.10.10.1:8080</code> →{" "}
+              <code className="text-primary">home.{baseDomain || "example.com"}</code>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -133,7 +133,7 @@ export function ServicesPage() {
                     <Input
                       value={form.subdomain}
                       onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
-                      placeholder="git"
+                      placeholder="home"
                       className="rounded-r-none"
                       required
                     />
@@ -151,7 +151,7 @@ export function ServicesPage() {
                         setForm({ ...form, target: e.target.value });
                         setPortStatus(null);
                       }}
-                      placeholder="10.10.10.1:3100"
+                      placeholder="10.10.10.1:8080"
                       className="font-mono"
                       required
                     />
