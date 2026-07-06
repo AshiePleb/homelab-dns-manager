@@ -169,6 +169,13 @@ class ApiClient {
     });
   }
 
+  migrateDomain(record_ids: number[], target_domain: string, dry_run = false) {
+    return this.request<MigrateDomainResponse>("/records/migrate-domain", {
+      method: "POST",
+      body: JSON.stringify({ record_ids, target_domain, dry_run }),
+    });
+  }
+
   getVersionStatus() {
     return this.request<VersionStatus>("/system/version");
   }
@@ -450,6 +457,23 @@ export interface Domain {
   record_count: number;
   last_synced_at: string | null;
   created_at: string;
+}
+
+export interface MigrateDomainItem {
+  record_id: number;
+  proxy_id: number | null;
+  old_hostname: string;
+  new_hostname: string;
+  migrated: boolean;
+}
+
+export interface MigrateDomainResponse {
+  dry_run: boolean;
+  target_domain: string;
+  migrated: number;
+  results: MigrateDomainItem[];
+  errors: string[];
+  caddy_reloaded: boolean;
 }
 
 export interface DNSRecord {

@@ -442,6 +442,29 @@ class BulkRecordsResponse(BaseModel):
     errors: list[str] = []
 
 
+class MigrateDomainRequest(BaseModel):
+    record_ids: list[int] = Field(min_length=1)
+    target_domain: str = Field(min_length=1)
+    dry_run: bool = False
+
+
+class MigrateDomainItem(BaseModel):
+    record_id: int
+    proxy_id: int | None = None
+    old_hostname: str
+    new_hostname: str
+    migrated: bool
+
+
+class MigrateDomainResponse(BaseModel):
+    dry_run: bool
+    target_domain: str
+    migrated: int
+    results: list[MigrateDomainItem]
+    errors: list[str] = []
+    caddy_reloaded: bool = False
+
+
 class HealthHistoryPoint(BaseModel):
     hostname: str
     overall: str

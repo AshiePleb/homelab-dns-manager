@@ -19,6 +19,8 @@ from app.schemas import (
     ServiceHealthRow,
     BulkRecordsRequest,
     BulkRecordsResponse,
+    MigrateDomainRequest,
+    MigrateDomainResponse,
     HealthHistoryPoint,
 )
 from app.core.deps import RequireViewer, RequireOperator
@@ -416,6 +418,27 @@ async def bulk_records(
         user_id=user.id,
     )
     return BulkRecordsResponse(updated=updated, errors=errors)
+
+
+@router_records.post("/migrate-domain", response_model=MigrateDomainResponse)
+async def migrate_domain(
+    data: MigrateDomainRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(RequireOperator),
+):
+    from app.services.domain_migration_service import migrate_records_to_domain
+
+    try:
+        result = await migrate_records_to_domain(
+            db,
+            record_ids=data.record_ids,
+            target_domain=data.target_domain,
+            dry_run=data.dry_run,
+            user_id=user.id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return MigrateDomainResponse(**result)
 
 
 @router_records.patch("/{record_id}", response_model=DNSRecordResponse)

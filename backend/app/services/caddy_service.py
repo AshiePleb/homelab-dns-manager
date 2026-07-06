@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import httpx
@@ -217,6 +218,22 @@ def get_cert_expiry(hostname: str) -> dict | None:
         }
     except Exception:
         return None
+
+
+def remove_stored_cert(hostname: str) -> bool:
+    """Remove on-disk ACME certificates for a hostname (all issuer dirs)."""
+    certs_root = CADDY_DIR / "certificates"
+    if not certs_root.is_dir():
+        return False
+    removed = False
+    for issuer_dir in certs_root.iterdir():
+        if not issuer_dir.is_dir():
+            continue
+        cert_dir = issuer_dir / hostname
+        if cert_dir.is_dir():
+            shutil.rmtree(cert_dir, ignore_errors=True)
+            removed = True
+    return removed
 
 
 async def probe_https(hostname: str, timeout: float = 4.0) -> tuple[bool, str]:

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, History, Zap } from "lucide-react";
+import { Plus, Trash2, History, Zap, ArrowRightLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api, DNSRecord, Domain } from "@/lib/api";
 import { DataTable, TableRow, TableCell } from "@/components/data-table";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDate } from "@/lib/utils";
 import { useAuth } from "@/context/auth";
+import { MigrateDomainPanel } from "@/components/migrate-domain-panel";
 
 const sslVariant = {
   none: "secondary" as const,
@@ -35,6 +36,7 @@ export function RecordsPage() {
   const [history, setHistory] = useState<{ old_content: string | null; new_content: string; change_reason: string; created_at: string }[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [showMigrate, setShowMigrate] = useState(false);
   const { isOperator } = useAuth();
 
   const [form, setForm] = useState({
@@ -211,6 +213,10 @@ export function RecordsPage() {
       {isOperator && selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
           <span className="font-medium">{selected.size} selected</span>
+          <Button size="sm" variant="default" disabled={bulkBusy} onClick={() => setShowMigrate(true)}>
+            <ArrowRightLeft className="h-3.5 w-3.5 mr-1.5" />
+            Migrate domain
+          </Button>
           <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => runBulk("enable_ddns")}>
             Enable DDNS
           </Button>
@@ -224,6 +230,20 @@ export function RecordsPage() {
             Delete
           </Button>
         </div>
+      )}
+
+      {showMigrate && isOperator && selected.size > 0 && (
+        <MigrateDomainPanel
+          recordIds={[...selected]}
+          records={records}
+          domains={domains}
+          onClose={() => setShowMigrate(false)}
+          onDone={() => {
+            setShowMigrate(false);
+            setSelected(new Set());
+            void load();
+          }}
+        />
       )}
 
       {historyId !== null && (
