@@ -429,11 +429,15 @@ async def migrate_domain(
     from app.services.domain_migration_service import migrate_records_to_domain
 
     try:
+        overrides = None
+        if data.mappings:
+            overrides = {m.record_id: m.subdomain for m in data.mappings}
         result = await migrate_records_to_domain(
             db,
             record_ids=data.record_ids,
             target_domain=data.target_domain,
             dry_run=data.dry_run,
+            subdomain_overrides=overrides,
             user_id=user.id,
         )
     except ValueError as e:

@@ -442,10 +442,16 @@ class BulkRecordsResponse(BaseModel):
     errors: list[str] = []
 
 
+class MigrateDomainMapping(BaseModel):
+    record_id: int
+    subdomain: str = Field(min_length=1, description="Subdomain on target zone, e.g. home or @ for apex")
+
+
 class MigrateDomainRequest(BaseModel):
     record_ids: list[int] = Field(min_length=1)
     target_domain: str = Field(min_length=1)
     dry_run: bool = False
+    mappings: list[MigrateDomainMapping] | None = None
 
 
 class MigrateDomainItem(BaseModel):
@@ -453,6 +459,7 @@ class MigrateDomainItem(BaseModel):
     proxy_id: int | None = None
     old_hostname: str
     new_hostname: str
+    subdomain: str | None = None
     migrated: bool
 
 

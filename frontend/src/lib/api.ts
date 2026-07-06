@@ -169,10 +169,15 @@ class ApiClient {
     });
   }
 
-  migrateDomain(record_ids: number[], target_domain: string, dry_run = false) {
+  migrateDomain(
+    record_ids: number[],
+    target_domain: string,
+    dry_run = false,
+    mappings?: { record_id: number; subdomain: string }[]
+  ) {
     return this.request<MigrateDomainResponse>("/records/migrate-domain", {
       method: "POST",
-      body: JSON.stringify({ record_ids, target_domain, dry_run }),
+      body: JSON.stringify({ record_ids, target_domain, dry_run, mappings }),
     });
   }
 
@@ -464,6 +469,7 @@ export interface MigrateDomainItem {
   proxy_id: number | null;
   old_hostname: string;
   new_hostname: string;
+  subdomain: string | null;
   migrated: boolean;
 }
 

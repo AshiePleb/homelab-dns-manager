@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import DNSRecord, DNSRecordHistory, Domain, HealthCheckHistory, LogLevel, ProxyHost
+from app.services.caddy_service import remove_stored_cert
 from app.services.cloudflare_service import get_cloudflare_service, sync_zones
 from app.services.ddns_service import get_public_ip
 from app.services.service_provision import _sync_caddy, build_fqdn
@@ -27,9 +28,18 @@ def extract_subdomain(hostname: str, zone_name: str) -> str:
     raise ValueError(f"{hostname} is not under zone {zone_name}")
 
 
-def compute_new_hostname(record: DNSRecord, target_domain: str) -> str:
+def resolve_new_hostname(
+    record: DNSRecord,
+    target_domain: str,
+    subdomain_override: str | None = None,
+) -> str:
     if not record.domain:
         raise ValueError(f"Record {record.id} has no linked domain")
+    if subdomain_override is not None:
+        sub = subdomain_override.strip().lower()
+        if not sub:
+            raise ValueError(f"Record {record.id}: subdomain cannot be empty")
+        return build_fqdn(sub, target_domain)
     subdomain = extract_subdomain(record.hostname, record.domain.name)
     return build_fqdn(subdomain, target_domain)
 
@@ -58,6 +68,7 @@ async def migrate_records_to_domain(
     record_ids: list[int],
     target_domain: str,
     dry_run: bool = False,
+    subdomain_overrides: dict[int, str] | None = None,
     user_id: int | None = None,
 ) -> dict:
     target_domain = target_domain.strip().lower().rstrip(".")
@@ -76,10 +87,10 @@ async def migrate_records_to_domain(
     if not target_zone:
         raise ValueError(f"Zone {target_domain} not found. Sync domains in Cloudflare first.")
 
+    overrides = subdomain_overrides or {}
     results: list[dict] = []
     errors: list[str] = []
     migrated = 0
-    proxy_id_by_record: dict[int, int | None] = {}
 
     for record_id in record_ids:
         result = await db.execute(
@@ -99,17 +110,22 @@ async def migrate_records_to_domain(
             select(ProxyHost).where(ProxyHost.hostname == record.hostname)
         )
         proxy = proxy_result.scalar_one_or_none()
-        proxy_id_by_record[record_id] = proxy.id if proxy else None
 
+        override = overrides.get(record_id)
         try:
-            new_hostname = compute_new_hostname(record, target_domain)
+            new_hostname = resolve_new_hostname(record, target_domain, override)
+            subdomain_used = (
+                override
+                if override is not None
+                else extract_subdomain(record.hostname, record.domain.name)
+            )
         except ValueError as e:
-            errors.append(str(e))
+            errors.append(str(e) if str(e).startswith(record.hostname) else f"{record.hostname}: {e}")
             continue
 
         old_hostname = record.hostname
         if new_hostname == old_hostname:
-            errors.append(f"{old_hostname}: already on {target_domain}")
+            errors.append(f"{old_hostname}: already on {target_domain} with this subdomain")
             continue
 
         if await _hostname_in_use(
@@ -126,6 +142,7 @@ async def migrate_records_to_domain(
             "proxy_id": proxy.id if proxy else None,
             "old_hostname": old_hostname,
             "new_hostname": new_hostname,
+            "subdomain": subdomain_used,
             "migrated": False,
         }
         results.append(item)
