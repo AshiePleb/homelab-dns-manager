@@ -44,22 +44,86 @@ def resolve_new_hostname(
     return build_fqdn(subdomain, target_domain)
 
 
-async def _hostname_in_use(
+def _cf_record_name_matches(record_name: str, fqdn: str, zone_name: str) -> bool:
+    name = record_name.lower().strip().rstrip(".")
+    host = fqdn.lower().strip().rstrip(".")
+    zone = zone_name.lower().strip().rstrip(".")
+    return name == host or (name == "@" and host == zone)
+
+
+async def _get_migration_hostname_conflict(
     db: AsyncSession,
     hostname: str,
     *,
     exclude_record_id: int | None = None,
     exclude_proxy_id: int | None = None,
-) -> bool:
-    q = select(DNSRecord.id).where(DNSRecord.hostname == hostname)
+) -> str | None:
+    """Only app-managed DNS rows and proxy hosts block migration (not CF sync-only rows)."""
+    q = select(DNSRecord).where(DNSRecord.hostname == hostname, DNSRecord.app_created.is_(True))
     if exclude_record_id is not None:
         q = q.where(DNSRecord.id != exclude_record_id)
-    if await db.scalar(q.limit(1)):
-        return True
-    pq = select(ProxyHost.id).where(ProxyHost.hostname == hostname)
+    conflict = (await db.execute(q.limit(1))).scalar_one_or_none()
+    if conflict:
+        return f"app-managed DNS record (id {conflict.id})"
+
+    pq = select(ProxyHost).where(ProxyHost.hostname == hostname)
     if exclude_proxy_id is not None:
         pq = pq.where(ProxyHost.id != exclude_proxy_id)
-    return bool(await db.scalar(pq.limit(1)))
+    proxy = (await db.execute(pq.limit(1))).scalar_one_or_none()
+    if proxy:
+        return f"reverse proxy (id {proxy.id})"
+    return None
+
+
+async def _remove_synced_hostname_rows(
+    db: AsyncSession,
+    hostname: str,
+    *,
+    keep_record_id: int,
+) -> None:
+    result = await db.execute(
+        select(DNSRecord).where(
+            DNSRecord.hostname == hostname,
+            DNSRecord.id != keep_record_id,
+            DNSRecord.app_created.is_(False),
+        )
+    )
+    for row in result.scalars().all():
+        await db.delete(row)
+
+
+async def _create_or_update_cf_record(
+    cf,
+    zone_id: str,
+    zone_name: str,
+    *,
+    record_type: str,
+    hostname: str,
+    content: str,
+    ttl: int,
+    proxied: bool,
+) -> dict:
+    existing = None
+    for rec in await cf.list_records(zone_id):
+        if _cf_record_name_matches(rec.get("name", ""), hostname, zone_name):
+            existing = rec
+            break
+
+    payload = {
+        "type": record_type,
+        "name": hostname,
+        "content": content,
+        "ttl": ttl,
+        "proxied": proxied,
+    }
+    if existing:
+        if existing.get("type") != record_type:
+            raise ValueError(
+                f"Cloudflare already has a {existing['type']} record for {hostname}; "
+                f"remove it or pick a different subdomain"
+            )
+        return await cf.update_record(zone_id, existing["id"], payload)
+    return await cf.create_record(zone_id, payload)
 
 
 async def migrate_records_to_domain(
@@ -128,13 +192,14 @@ async def migrate_records_to_domain(
             errors.append(f"{old_hostname}: already on {target_domain} with this subdomain")
             continue
 
-        if await _hostname_in_use(
+        conflict = await _get_migration_hostname_conflict(
             db,
             new_hostname,
             exclude_record_id=record.id,
             exclude_proxy_id=proxy.id if proxy else None,
-        ):
-            errors.append(f"{old_hostname}: {new_hostname} already exists")
+        )
+        if conflict:
+            errors.append(f"{old_hostname}: {new_hostname} already in use ({conflict})")
             continue
 
         item = {
@@ -162,19 +227,21 @@ async def migrate_records_to_domain(
                 ip_content = record.content
 
         try:
-            cf_rec = await cf.create_record(
+            cf_rec = await _create_or_update_cf_record(
+                cf,
                 target_zone.zone_id,
-                {
-                    "type": record.record_type,
-                    "name": new_hostname,
-                    "content": ip_content,
-                    "ttl": record.ttl,
-                    "proxied": record.proxied,
-                },
+                target_zone.name,
+                record_type=record.record_type,
+                hostname=new_hostname,
+                content=ip_content,
+                ttl=record.ttl,
+                proxied=record.proxied,
             )
         except Exception as e:
             errors.append(f"{old_hostname}: failed to create DNS in {target_domain}: {e}")
             continue
+
+        await _remove_synced_hostname_rows(db, new_hostname, keep_record_id=record.id)
 
         record.domain_id = target_zone.id
         record.hostname = new_hostname
