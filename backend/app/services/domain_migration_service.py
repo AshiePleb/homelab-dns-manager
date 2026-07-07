@@ -80,12 +80,14 @@ async def _remove_synced_hostname_rows(
     hostname: str,
     *,
     keep_record_id: int,
+    record_type: str,
 ) -> None:
     result = await db.execute(
         select(DNSRecord).where(
             DNSRecord.hostname == hostname,
             DNSRecord.id != keep_record_id,
             DNSRecord.app_created.is_(False),
+            DNSRecord.record_type == record_type.upper(),
         )
     )
     for row in result.scalars().all():
@@ -103,11 +105,18 @@ async def _create_or_update_cf_record(
     ttl: int,
     proxied: bool,
 ) -> dict:
-    existing = None
+    record_type = record_type.upper()
+    same_type: dict | None = None
+    blocking: dict | None = None
     for rec in await cf.list_records(zone_id):
-        if _cf_record_name_matches(rec.get("name", ""), hostname, zone_name):
-            existing = rec
+        if not _cf_record_name_matches(rec.get("name", ""), hostname, zone_name):
+            continue
+        rec_type = (rec.get("type") or "").upper()
+        if rec_type == record_type:
+            same_type = rec
             break
+        if rec_type in {"A", "AAAA", "CNAME"}:
+            blocking = rec
 
     payload = {
         "type": record_type,
@@ -116,13 +125,13 @@ async def _create_or_update_cf_record(
         "ttl": ttl,
         "proxied": proxied,
     }
-    if existing:
-        if existing.get("type") != record_type:
-            raise ValueError(
-                f"Cloudflare already has a {existing['type']} record for {hostname}; "
-                f"remove it or pick a different subdomain"
-            )
-        return await cf.update_record(zone_id, existing["id"], payload)
+    if same_type:
+        return await cf.update_record(zone_id, same_type["id"], payload)
+    if blocking:
+        raise ValueError(
+            f"Cloudflare already has a {blocking['type']} record for {hostname}; "
+            f"remove it or pick a different subdomain"
+        )
     return await cf.create_record(zone_id, payload)
 
 
@@ -241,7 +250,9 @@ async def migrate_records_to_domain(
             errors.append(f"{old_hostname}: failed to create DNS in {target_domain}: {e}")
             continue
 
-        await _remove_synced_hostname_rows(db, new_hostname, keep_record_id=record.id)
+        await _remove_synced_hostname_rows(
+            db, new_hostname, keep_record_id=record.id, record_type=record.record_type
+        )
 
         record.domain_id = target_zone.id
         record.hostname = new_hostname
