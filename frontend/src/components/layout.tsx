@@ -10,6 +10,7 @@ import {
   X,
   Layers,
   Shield,
+  Key,
 } from "lucide-react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -24,13 +25,14 @@ const navItems = [
   { to: "/domains", icon: Globe, label: "Domains" },
   { to: "/records", icon: FileText, label: "DNS Records" },
   { to: "/caddy", icon: Shield, label: "Caddy Proxy" },
+  { to: "/api-keys", icon: Key, label: "API Keys", adminOnly: true },
   { to: "/logs", icon: ScrollText, label: "Activity Logs" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -64,7 +66,7 @@ export function Layout() {
         </div>
 
         <nav className="flex-1 space-y-1 p-3 overflow-y-auto scrollbar-thin">
-          {navItems.map((item) => (
+          {navItems.filter((item) => !item.adminOnly || isAdmin).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

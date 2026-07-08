@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import secrets
 
 from cryptography.fernet import Fernet
 from passlib.context import CryptContext
@@ -82,3 +83,28 @@ def encrypt_value(value: str) -> str:
 
 def decrypt_value(value: str) -> str:
     return _get_fernet().decrypt(value.encode()).decode()
+
+
+API_KEY_PREFIX = "hld_"
+
+
+def generate_api_key() -> tuple[str, str, str]:
+    """Return (full_key, prefix_for_display, hash)."""
+    raw = secrets.token_urlsafe(32)
+    full_key = f"{API_KEY_PREFIX}{raw}"
+    prefix = full_key[:12]
+    key_hash = hash_api_key(full_key)
+    return full_key, prefix, key_hash
+
+
+def hash_api_key(key: str) -> str:
+    material = f"{settings.jwt_secret_key}:{key}".encode()
+    return hashlib.sha256(material).hexdigest()
+
+
+def verify_api_key(key: str, key_hash: str) -> bool:
+    return hash_api_key(key) == key_hash
+
+
+def is_api_key_token(token: str) -> bool:
+    return token.startswith(API_KEY_PREFIX)

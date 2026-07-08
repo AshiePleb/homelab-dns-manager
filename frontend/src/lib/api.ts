@@ -372,6 +372,22 @@ class ApiClient {
     return this.request(`/users/${id}`, { method: "DELETE" });
   }
 
+  getApiEndpoint() {
+    return this.request<ApiEndpointInfo>("/api-keys/endpoint");
+  }
+
+  getApiKeys() {
+    return this.request<ApiKey[]>("/api-keys");
+  }
+
+  createApiKey(data: { name: string; max_dns_records: number; max_services: number }) {
+    return this.request<ApiKeyCreated>("/api-keys", { method: "POST", body: JSON.stringify(data) });
+  }
+
+  revokeApiKey(id: number) {
+    return this.request(`/api-keys/${id}`, { method: "DELETE" });
+  }
+
   getCaddyStatus() {
     return this.request<CaddyStatus>("/caddy/status");
   }
@@ -726,4 +742,31 @@ export interface CaddyHost {
   ssl_message: string;
   has_cert: boolean;
   updated_at: string;
+}
+
+export interface ApiKeyUsage {
+  dns_records: number;
+  services: number;
+}
+
+export interface ApiKey {
+  id: number;
+  name: string;
+  key_prefix: string;
+  max_dns_records: number;
+  max_services: number;
+  is_active: boolean;
+  usage: ApiKeyUsage;
+  last_used_at: string | null;
+  created_at: string;
+}
+
+export interface ApiKeyCreated extends ApiKey {
+  api_key: string;
+}
+
+export interface ApiEndpointInfo {
+  api_base: string;
+  auth_header: string;
+  docs_note: string;
 }

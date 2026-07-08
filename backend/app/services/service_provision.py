@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ProxyHost, LogLevel
+from app.models import ProxyHost, LogLevel, DNSRecord
 from app.services.bootstrap_service import ensure_managed_ddns_hostname
 from app.services.ddns_service import get_public_ip
 from app.services.settings_service import get_setting, log_activity
@@ -92,6 +92,7 @@ async def provision_service(
     create_proxy: bool = True,
     skip_port_check: bool = False,
     user_id: int | None = None,
+    api_key_id: int | None = None,
 ) -> dict:
     zone = base_domain or await get_default_zone(db)
     if not zone:
@@ -111,24 +112,51 @@ async def provision_service(
         )
 
     if create_dns:
+        if api_key_id is not None:
+            from app.services.api_key_service import ensure_dns_limit
+            from app.models import ApiKey
+            from sqlalchemy import select as sa_select
+
+            key_row = await db.get(ApiKey, api_key_id)
+            if key_row:
+                existing_dns = await db.execute(
+                    sa_select(DNSRecord).where(
+                        DNSRecord.hostname == hostname, DNSRecord.api_key_id == api_key_id
+                    )
+                )
+                if not existing_dns.scalar_one_or_none():
+                    await ensure_dns_limit(db, key_row)
         public_ip = await get_public_ip()
         record = await ensure_managed_ddns_hostname(
-            db, hostname, proxied=proxied, current_ip=public_ip
+            db, hostname, proxied=proxied, current_ip=public_ip, api_key_id=api_key_id
         )
         if not record:
             raise ValueError(f"Failed to create Cloudflare DNS record for {hostname}")
         record.app_created = True
+        if api_key_id is not None:
+            record.api_key_id = api_key_id
         dns_record_id = record.id
 
     if create_proxy:
         existing = await db.execute(select(ProxyHost).where(ProxyHost.hostname == hostname))
         proxy = existing.scalar_one_or_none()
+        if proxy and api_key_id is not None and proxy.api_key_id not in (None, api_key_id):
+            raise ValueError(f"Hostname {hostname} is already used by another service")
+        if not proxy and api_key_id is not None:
+            from app.services.api_key_service import ensure_service_limit
+            from app.models import ApiKey
+
+            key_row = await db.get(ApiKey, api_key_id)
+            if key_row:
+                await ensure_service_limit(db, key_row)
         if proxy:
             proxy.forward_host = forward_host
             proxy.forward_port = forward_port
             proxy.ssl_mode = ssl_mode
             proxy.port_reachable = port_status["reachable"]
             proxy.last_port_check = datetime.now(timezone.utc)
+            if api_key_id is not None:
+                proxy.api_key_id = api_key_id
         else:
             proxy = ProxyHost(
                 hostname=hostname,
@@ -137,6 +165,7 @@ async def provision_service(
                 ssl_mode=ssl_mode,
                 port_reachable=port_status["reachable"],
                 last_port_check=datetime.now(timezone.utc),
+                api_key_id=api_key_id,
             )
             db.add(proxy)
         await db.flush()
@@ -153,7 +182,12 @@ async def provision_service(
         "service",
         f"Provisioned {hostname}",
         LogLevel.SUCCESS,
-        details={"hostname": hostname, "ssl_mode": ssl_mode, "port": port_status},
+        details={
+            "hostname": hostname,
+            "ssl_mode": ssl_mode,
+            "port": port_status,
+            "api_key_id": api_key_id,
+        },
         user_id=user_id,
     )
 
@@ -185,10 +219,17 @@ async def provision_service(
     }
 
 
-async def delete_service(db: AsyncSession, proxy_id: int, user_id: int | None = None) -> None:
+async def delete_service(
+    db: AsyncSession,
+    proxy_id: int,
+    user_id: int | None = None,
+    api_key_id: int | None = None,
+) -> None:
     result = await db.execute(select(ProxyHost).where(ProxyHost.id == proxy_id))
     host = result.scalar_one_or_none()
     if not host:
+        raise ValueError("Service not found")
+    if api_key_id is not None and host.api_key_id != api_key_id:
         raise ValueError("Service not found")
     hostname = host.hostname
     await db.delete(host)

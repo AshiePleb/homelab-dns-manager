@@ -4,9 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import User, UserRole
-from app.core.security import decode_access_token
+from app.models import User, UserRole, ApiKey
+from app.core.security import decode_access_token, is_api_key_token
 from app.services.session_service import get_active_session, touch_session
+from app.services.api_key_service import get_api_key_by_token
 
 security = HTTPBearer(auto_error=False)
 
@@ -56,3 +57,18 @@ def require_role(*roles: UserRole):
 RequireAdmin = require_role(UserRole.ADMIN)
 RequireOperator = require_role(UserRole.ADMIN, UserRole.OPERATOR)
 RequireViewer = require_role(UserRole.ADMIN, UserRole.OPERATOR, UserRole.VIEWER)
+
+
+async def get_api_key(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> ApiKey:
+    if not credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key required")
+    token = credentials.credentials
+    if not is_api_key_token(token):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+    api_key = await get_api_key_by_token(db, token)
+    if not api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
+    return api_key

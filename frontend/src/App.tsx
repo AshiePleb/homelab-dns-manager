@@ -11,6 +11,7 @@ import { RecordsPage } from "@/pages/records";
 import { LogsPage } from "@/pages/logs";
 import { SettingsPage } from "@/pages/settings";
 import { CaddyPage } from "@/pages/caddy";
+import { ApiKeysPage } from "@/pages/api-keys";
 
 function LoadingScreen() {
   return (
@@ -54,6 +55,7 @@ function AppRoutes() {
         <Route path="domains" element={<DomainsPage />} />
         <Route path="records" element={<RecordsPage />} />
         <Route path="caddy" element={<CaddyPage />} />
+        <Route path="api-keys" element={<ApiKeysPage />} />
         <Route path="logs" element={<LogsPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>

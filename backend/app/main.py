@@ -44,6 +44,8 @@ from app.api.caddy import router as caddy_router
 from app.api.preferences import router as preferences_router
 from app.api.backup import router as backup_router
 from app.api.system import router as system_router
+from app.api.api_keys import router as api_keys_router
+from app.api.external import router as external_router
 
 settings = get_settings()
 scheduler = AsyncIOScheduler()
@@ -189,6 +191,8 @@ app.include_router(caddy_router, prefix=API_PREFIX)
 app.include_router(preferences_router, prefix=API_PREFIX)
 app.include_router(backup_router, prefix=API_PREFIX)
 app.include_router(system_router, prefix=API_PREFIX)
+app.include_router(api_keys_router, prefix=API_PREFIX)
+app.include_router(external_router, prefix=API_PREFIX)
 
 
 @app.get(f"{API_PREFIX}/health")

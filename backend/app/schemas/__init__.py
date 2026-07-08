@@ -493,3 +493,50 @@ class VersionStatusResponse(BaseModel):
     check_ok: bool = False
     image_digest: str | None = None
     latest_digest: str | None = None
+
+
+class ApiKeyUsage(BaseModel):
+    dns_records: int
+    services: int
+
+
+class ApiKeyLimits(BaseModel):
+    max_dns_records: int
+    max_services: int
+
+
+class ApiKeyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    max_dns_records: int = Field(default=10, ge=1, le=500)
+    max_services: int = Field(default=10, ge=1, le=500)
+
+
+class ApiKeyUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    max_dns_records: int | None = Field(default=None, ge=1, le=500)
+    max_services: int | None = Field(default=None, ge=1, le=500)
+    is_active: bool | None = None
+
+
+class ApiKeyResponse(BaseModel):
+    id: int
+    name: str
+    key_prefix: str
+    max_dns_records: int
+    max_services: int
+    is_active: bool
+    usage: ApiKeyUsage
+    last_used_at: datetime | None
+    created_at: datetime
+
+
+class ApiKeyCreatedResponse(ApiKeyResponse):
+    api_key: str = Field(description="Full API key — shown only once at creation")
+
+
+class ExternalApiInfo(BaseModel):
+    key_name: str
+    api_base: str
+    limits: ApiKeyLimits
+    usage: ApiKeyUsage
+    endpoints: dict[str, str]

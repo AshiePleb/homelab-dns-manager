@@ -97,11 +97,30 @@ class Domain(Base):
     records: Mapped[list["DNSRecord"]] = relationship(back_populates="domain")
 
 
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    key_prefix: Mapped[str] = mapped_column(String(16), index=True)
+    key_hash: Mapped[str] = mapped_column(String(255))
+    max_dns_records: Mapped[int] = mapped_column(Integer, default=10)
+    max_services: Mapped[int] = mapped_column(Integer, default=10)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class DNSRecord(Base):
     __tablename__ = "dns_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     domain_id: Mapped[int] = mapped_column(ForeignKey("domains.id"), index=True)
+    api_key_id: Mapped[int | None] = mapped_column(ForeignKey("api_keys.id"), nullable=True, index=True)
     cloudflare_record_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     hostname: Mapped[str] = mapped_column(String(255), index=True)
     record_type: Mapped[str] = mapped_column(String(16), default="A")
@@ -163,6 +182,7 @@ class ProxyHost(Base):
     __tablename__ = "proxy_hosts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    api_key_id: Mapped[int | None] = mapped_column(ForeignKey("api_keys.id"), nullable=True, index=True)
     hostname: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     forward_host: Mapped[str] = mapped_column(String(255))
     forward_port: Mapped[int] = mapped_column(Integer)

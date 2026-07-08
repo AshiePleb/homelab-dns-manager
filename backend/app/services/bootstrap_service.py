@@ -76,6 +76,7 @@ async def ensure_managed_ddns_hostname(
     *,
     proxied: bool | None = None,
     current_ip: str | None = None,
+    api_key_id: int | None = None,
 ) -> DNSRecord | None:
     """
     Register a hostname for dynamic DNS: link existing Cloudflare A record or create one.
@@ -119,6 +120,8 @@ async def ensure_managed_ddns_hostname(
         record.managed = True
         record.app_created = True
         record.proxied = use_proxied
+        if api_key_id is not None:
+            record.api_key_id = api_key_id
         if cf_match and not record.cloudflare_record_id:
             record.cloudflare_record_id = cf_match["id"]
         if record.cloudflare_record_id:
@@ -137,6 +140,7 @@ async def ensure_managed_ddns_hostname(
             managed=True,
             app_created=True,
             ttl=cf_match.get("ttl", 1),
+            api_key_id=api_key_id,
         )
         db.add(record)
         await db.flush()
@@ -164,6 +168,7 @@ async def ensure_managed_ddns_hostname(
         app_created=True,
         ttl=1,
         last_updated_at=datetime.now(timezone.utc),
+        api_key_id=api_key_id,
     )
     db.add(record)
     await db.flush()
