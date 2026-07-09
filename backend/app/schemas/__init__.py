@@ -488,6 +488,7 @@ class VersionStatusResponse(BaseModel):
     image: str
     docker_hub_repo: str
     latest_tag: str = "latest"
+    latest_version: str | None = None
     latest_published_at: str | None = None
     update_available: bool = False
     check_ok: bool = False

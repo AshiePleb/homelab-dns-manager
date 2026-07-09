@@ -445,6 +445,7 @@ export interface VersionStatus {
   image: string;
   docker_hub_repo: string;
   latest_tag: string;
+  latest_version?: string | null;
   latest_published_at: string | null;
   update_available: boolean;
   check_ok: boolean;

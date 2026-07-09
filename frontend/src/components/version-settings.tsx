@@ -29,14 +29,16 @@ export function VersionSettings() {
     void loadVersion();
   }, []);
 
+  const latestLabel = version?.latest_version || version?.latest_tag;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
           <CardTitle>App version</CardTitle>
           <CardDescription>
-            Compares this server&apos;s Docker image digest with the <code className="text-xs">latest</code> tag on
-            Docker Hub.
+            Compares this server&apos;s version with the newest semver tag on Docker Hub (e.g.{" "}
+            <code className="text-xs">v1.1.0</code>).
           </CardDescription>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void loadVersion()} disabled={checking}>
@@ -52,20 +54,26 @@ export function VersionSettings() {
                 Running <strong>{formatVersionTag(version.version)}</strong>
               </span>
               {version.update_available ? (
-                <Badge variant="warning">Update available</Badge>
+                <Badge variant="warning">
+                  Update to {formatVersionTag(latestLabel || "")}
+                </Badge>
               ) : version.check_ok ? (
                 <Badge variant="success">Up to date</Badge>
               ) : (
                 <Badge variant="secondary">Could not verify</Badge>
               )}
             </div>
+            {latestLabel && (
+              <p className="text-muted-foreground">
+                Latest on Docker Hub: <strong>{formatVersionTag(latestLabel)}</strong>
+              </p>
+            )}
             {version.build_time && (
               <p className="text-muted-foreground">Built {formatDate(version.build_time)}</p>
             )}
             {version.latest_published_at && (
               <p className="text-muted-foreground">
-                Docker Hub <code className="text-xs">{version.latest_tag}</code> published{" "}
-                {formatDate(version.latest_published_at)}
+                Published {formatDate(version.latest_published_at)}
               </p>
             )}
             {version.update_available && (

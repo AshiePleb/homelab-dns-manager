@@ -26,10 +26,14 @@ export function VersionBadge() {
             "inline-flex items-center gap-1 rounded-md px-2 py-1 font-medium",
             "bg-warning/15 text-warning hover:bg-warning/25"
           )}
-          title="A newer image is on Docker Hub"
+          title={
+            status.latest_version
+              ? `Update to ${status.latest_version}`
+              : "A newer image is on Docker Hub"
+          }
         >
           <ArrowUpCircle className="h-3.5 w-3.5" aria-hidden />
-          Update
+          {status.latest_version ? `→ ${status.latest_version}` : "Update"}
         </Link>
       )}
     </div>
