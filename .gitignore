@@ -36,3 +36,4 @@ DOCKERHUB.md
 scripts/*
 !scripts/release.sh
 !scripts/deploy-vps.sh
+!scripts/docker-publish-local.sh

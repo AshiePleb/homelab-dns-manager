@@ -156,21 +156,38 @@ git -C "$ROOT" push origin main
 git -C "$ROOT" push origin "$TAG"
 
 echo "→ Waiting for GitHub Actions to build Docker image..."
+CI_OK=0
 if command -v gh >/dev/null 2>&1; then
   sleep 5
-  RUN_ID="$(gh run list --repo "$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github.com[:/](.+)(\.git)?#\1#')" --workflow=docker-publish.yml --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
+  REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github.com[:/](.+)(\.git)?#\1#')"
+  RUN_ID="$(gh run list --repo "$REPO_SLUG" --workflow=docker-publish.yml --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
   if [[ -n "$RUN_ID" && "$RUN_ID" != "null" ]]; then
-    gh run watch "$RUN_ID" --exit-status || {
-      echo "GitHub Actions build failed or timed out. Check Actions tab." >&2
-      exit 1
-    }
+    if gh run watch "$RUN_ID" --exit-status 2>/dev/null; then
+      CI_OK=1
+    else
+      echo "⚠ GitHub Actions failed (often missing DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets)." >&2
+    fi
   else
-    echo "  (gh could not find workflow run — wait ~2 min for Docker Hub, then deploy VPS)"
-    sleep 120
+    echo "  (no workflow run found)"
   fi
 else
-  echo "  Install 'gh' CLI to auto-wait for CI, or wait ~2 min before VPS deploy"
-  sleep 120
+  echo "  Install 'gh' CLI to auto-wait for CI"
+fi
+
+if [[ "$CI_OK" -eq 0 ]]; then
+  echo "→ Falling back to local Docker build/push..."
+  if "${ROOT}/scripts/docker-publish-local.sh" "$TAG"; then
+    CI_OK=1
+  else
+    echo "" >&2
+    echo "Local push failed. Either:" >&2
+    echo "  1. docker login -u ashiepleb   (token from hub.docker.com/settings/security)" >&2
+    echo "  2. Set GitHub secrets and re-run CI:" >&2
+    echo "       gh secret set DOCKERHUB_USERNAME -b ashiepleb" >&2
+    echo "       gh secret set DOCKERHUB_TOKEN -b<your-token>" >&2
+    echo "       gh run rerun --failed" >&2
+    exit 1
+  fi
 fi
 
 echo "✓ Released ${TAG} — Docker Hub: ashiepleb/homelab-dns-manager:${TAG} + :latest"
