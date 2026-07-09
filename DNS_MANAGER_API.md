@@ -25,10 +25,22 @@ So the site Domains dropdown and auto-detect should use **`/catalog`**, not `/re
 1. **`GET /api/v1/catalog`** (read-only) — returns all app-managed hostnames for linking:
    ```json
    [
-     { "hostname": "home.ahlds.uk", "internal_target": "10.10.10.3:9000", "dns_record_id": 12, "dns_service_id": 8, "managed_by": "panel" }
+     {
+       "hostname": "home.ahlds.uk",
+       "internal_target": "10.10.10.3:9000",
+       "dns_record_id": 12,
+       "dns_service_id": 8,
+       "managed_by": "panel",
+       "ssl_status": "working",
+       "ssl_provider": "Let's Encrypt",
+       "ssl_expires_at": "2026-10-01T12:00:00+00:00",
+       "ssl_days_left": 84,
+       "ddns_status": "working",
+       "public_ip": "82.4.1.213"
+     }
    ]
    ```
-   Integration keys (e.g. WebHost) get read access via `/catalog`; delete/provision still scoped to key-owned resources.
+   WebHost prefers these fields over live HTTPS probes (cached 5 min on WebHost when omitted).
 
 2. **API key flag `can_read_all: true`** — *(not implemented)* `GET /records` and `GET /services` include all records when set.
 

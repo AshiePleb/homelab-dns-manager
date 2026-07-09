@@ -549,3 +549,15 @@ class CatalogItem(BaseModel):
     dns_record_id: int | None = None
     dns_service_id: int | None = None
     managed_by: str = Field(description="panel = DNS Manager UI, api = created via API key")
+    ssl_status: str | None = Field(
+        default=None,
+        description="working | expiring | expired | unreachable | error",
+    )
+    ssl_provider: str | None = Field(default=None, description="Let's Encrypt or ZeroSSL")
+    ssl_expires_at: str | None = None
+    ssl_days_left: int | None = None
+    ddns_status: str | None = Field(
+        default=None,
+        description="working | stale | static | unknown",
+    )
+    public_ip: str | None = None
