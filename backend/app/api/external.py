@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import ApiKey, DNSRecord, ProxyHost, Domain
 from app.schemas import (
+    CatalogItem,
     ExternalApiInfo,
     ServiceProvisionRequest,
     ServiceProvisionResponse,
@@ -17,6 +18,7 @@ from app.schemas import (
 )
 from app.core.deps import get_api_key
 from app.services.api_key_service import get_usage
+from app.services.catalog_service import list_linkable_catalog
 from app.services.service_provision import (
     provision_service,
     list_provisioned_services,
@@ -56,10 +58,20 @@ async def api_info(
             "delete_service": f"{base}/services/{{proxy_host_id}}",
             "records": f"{base}/records",
             "delete_record": f"{base}/records/{{record_id}}",
+            "catalog": f"{base}/catalog",
             "check_port": f"{base}/services/check-port",
             "preview": f"{base}/services/preview",
         },
     )
+
+
+@router.get("/catalog", response_model=list[CatalogItem])
+async def get_catalog(
+    db: AsyncSession = Depends(get_db),
+    _: ApiKey = Depends(get_api_key),
+):
+    """Read-only list of all linkable hostnames for WebHost domain linking and auto-detect."""
+    return await list_linkable_catalog(db)
 
 
 @router.get("/services/template", response_model=ServiceTemplateResponse)

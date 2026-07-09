@@ -540,3 +540,11 @@ class ExternalApiInfo(BaseModel):
     limits: ApiKeyLimits
     usage: ApiKeyUsage
     endpoints: dict[str, str]
+
+
+class CatalogItem(BaseModel):
+    hostname: str
+    internal_target: str
+    dns_record_id: int | None = None
+    dns_service_id: int | None = None
+    managed_by: str = Field(description="panel = DNS Manager UI, api = created via API key")
