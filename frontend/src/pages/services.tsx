@@ -20,6 +20,7 @@ export function ServicesPage() {
   });
   const [portStatus, setPortStatus] = useState<{ reachable: boolean; message: string } | null>(null);
   const [checkingPort, setCheckingPort] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     api.getServiceTemplate().then((tmpl) => {
@@ -59,6 +60,8 @@ export function ServicesPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const result = await api.provisionService({
         subdomain: form.subdomain,
@@ -74,6 +77,8 @@ export function ServicesPage() {
       setPortStatus(null);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to provision service");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -111,6 +116,7 @@ export function ServicesPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} className="space-y-4">
+              <fieldset disabled={submitting} className="space-y-4 disabled:opacity-70">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Base domain</Label>
@@ -160,7 +166,7 @@ export function ServicesPage() {
                       className="font-mono"
                       required
                     />
-                    <Button type="button" variant="outline" onClick={checkPort} disabled={checkingPort}>
+                    <Button type="button" variant="outline" onClick={checkPort} disabled={checkingPort || submitting}>
                       <Wifi className="h-4 w-4 mr-1" />
                       {checkingPort ? "…" : "Test port"}
                     </Button>
@@ -196,8 +202,18 @@ export function ServicesPage() {
                   <span className="text-muted-foreground">(via Caddy)</span>
                 </div>
               </div>
+              </fieldset>
 
-              <Button type="submit">Create service</Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Creating…
+                  </>
+                ) : (
+                  "Create service"
+                )}
+              </Button>
             </form>
           </CardContent>
         </Card>

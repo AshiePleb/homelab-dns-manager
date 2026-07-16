@@ -310,6 +310,23 @@ class ApiClient {
     });
   }
 
+  updateService(
+    id: number,
+    data: { target?: string; forward_host?: string; forward_port?: number; skip_port_check?: boolean }
+  ) {
+    return this.request<{
+      id: number;
+      hostname: string;
+      forward_host: string;
+      forward_port: number;
+      port_reachable: boolean | null;
+      port_message: string;
+      mapping: string;
+      changed: boolean;
+      caddy_reloaded: boolean;
+    }>(`/services/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+  }
+
   deleteService(id: number) {
     return this.request(`/services/${id}`, { method: "DELETE" });
   }

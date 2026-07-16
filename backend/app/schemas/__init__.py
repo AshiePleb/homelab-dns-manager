@@ -302,6 +302,29 @@ class ServiceProvisionResponse(BaseModel):
     port_reachable: bool
     port_message: str
     mapping: str
+    created: bool = True
+
+
+class ServiceTargetUpdate(BaseModel):
+    forward_host: str = ""
+    forward_port: int | None = None
+    target: str | None = Field(
+        default=None,
+        description="Optional combined target e.g. 10.10.10.4:8932",
+    )
+    skip_port_check: bool = False
+
+
+class ServiceTargetUpdateResponse(BaseModel):
+    id: int
+    hostname: str
+    forward_host: str
+    forward_port: int
+    port_reachable: bool | None
+    port_message: str
+    mapping: str
+    changed: bool
+    caddy_reloaded: bool
 
 
 class ServiceTemplateResponse(BaseModel):

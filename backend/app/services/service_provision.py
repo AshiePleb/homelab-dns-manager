@@ -140,6 +140,7 @@ async def provision_service(
     if create_proxy:
         existing = await db.execute(select(ProxyHost).where(ProxyHost.hostname == hostname))
         proxy = existing.scalar_one_or_none()
+        proxy_created = proxy is None
         if proxy and api_key_id is not None and proxy.api_key_id not in (None, api_key_id):
             raise ValueError(f"Hostname {hostname} is already used by another service")
         if not proxy and api_key_id is not None:
@@ -171,6 +172,8 @@ async def provision_service(
         await db.flush()
         proxy_host_id = proxy.id
         await _sync_caddy(db)
+    else:
+        proxy_created = False
 
     ssl_label = "Caddy HTTPS (Let's Encrypt)"
     mapping = f"{hostname} → {forward_host}:{forward_port} [{ssl_label}]"
@@ -180,27 +183,30 @@ async def provision_service(
     await log_activity(
         db,
         "service",
-        f"Provisioned {hostname}",
+        f"{'Provisioned' if proxy_created else 'Updated'} {hostname}",
         LogLevel.SUCCESS,
         details={
             "hostname": hostname,
             "ssl_mode": ssl_mode,
             "port": port_status,
             "api_key_id": api_key_id,
+            "created": proxy_created,
         },
         user_id=user_id,
     )
 
-    from app.services.notification_service import send_notifications
-    await send_notifications(
-        db,
-        "service_created",
-        {
-            "hostname": hostname,
-            "target": f"{forward_host}:{forward_port}",
-            "ssl_mode": ssl_mode,
-        },
-    )
+    # Only notify on first create — upserts / double-submits must not spam Discord
+    if proxy_created or (create_dns and not create_proxy):
+        from app.services.notification_service import send_notifications
+        await send_notifications(
+            db,
+            "service_created",
+            {
+                "hostname": hostname,
+                "target": f"{forward_host}:{forward_port}",
+                "ssl_mode": ssl_mode,
+            },
+        )
 
     return {
         "hostname": hostname,
@@ -216,6 +222,82 @@ async def provision_service(
         "port_reachable": port_status["reachable"],
         "port_message": port_status["message"],
         "mapping": mapping,
+        "created": proxy_created if create_proxy else True,
+    }
+
+
+async def update_service_target(
+    db: AsyncSession,
+    proxy_id: int,
+    *,
+    forward_host: str,
+    forward_port: int,
+    skip_port_check: bool = False,
+    user_id: int | None = None,
+    api_key_id: int | None = None,
+) -> dict:
+    """Update upstream host:port for an existing proxy and reload Caddy."""
+    result = await db.execute(select(ProxyHost).where(ProxyHost.id == proxy_id))
+    proxy = result.scalar_one_or_none()
+    if not proxy:
+        raise ValueError("Service not found")
+    if api_key_id is not None and proxy.api_key_id != api_key_id:
+        raise ValueError("Service not found")
+
+    host = forward_host.strip()
+    if not host:
+        raise ValueError("Target host is required")
+    if forward_port < 1 or forward_port > 65535:
+        raise ValueError("Port must be between 1 and 65535")
+
+    port_status = await check_port(host, forward_port)
+    if not skip_port_check and not port_status["reachable"]:
+        raise ValueError(
+            f"Port {forward_port} on {host} is not reachable: {port_status['message']}. "
+            "Check firewall/router port forwarding, or enable 'Skip port check'."
+        )
+
+    old_target = f"{proxy.forward_host}:{proxy.forward_port}"
+    new_target = f"{host}:{forward_port}"
+    if old_target == new_target:
+        return {
+            "id": proxy.id,
+            "hostname": proxy.hostname,
+            "forward_host": proxy.forward_host,
+            "forward_port": proxy.forward_port,
+            "port_reachable": proxy.port_reachable,
+            "port_message": port_status["message"],
+            "mapping": f"{proxy.hostname} → {new_target}",
+            "changed": False,
+            "caddy_reloaded": False,
+        }
+
+    proxy.forward_host = host
+    proxy.forward_port = forward_port
+    proxy.port_reachable = port_status["reachable"]
+    proxy.last_port_check = datetime.now(timezone.utc)
+    await db.flush()
+    await _sync_caddy(db)
+
+    await log_activity(
+        db,
+        "service",
+        f"Updated {proxy.hostname}: {old_target} → {new_target}",
+        LogLevel.SUCCESS,
+        details={"hostname": proxy.hostname, "old_target": old_target, "new_target": new_target},
+        user_id=user_id,
+    )
+
+    return {
+        "id": proxy.id,
+        "hostname": proxy.hostname,
+        "forward_host": proxy.forward_host,
+        "forward_port": proxy.forward_port,
+        "port_reachable": port_status["reachable"],
+        "port_message": port_status["message"],
+        "mapping": f"{proxy.hostname} → {new_target}",
+        "changed": True,
+        "caddy_reloaded": True,
     }
 
 

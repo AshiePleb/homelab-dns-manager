@@ -8,6 +8,8 @@ from app.schemas import (
     ServiceProvisionResponse,
     ServiceTemplateResponse,
     ServiceListItem,
+    ServiceTargetUpdate,
+    ServiceTargetUpdateResponse,
     PortCheckResult,
 )
 from app.core.deps import RequireViewer, RequireOperator
@@ -15,6 +17,7 @@ from app.services.service_provision import (
     provision_service,
     list_provisioned_services,
     delete_service,
+    update_service_target,
     get_default_zone,
     parse_host_port,
     build_fqdn,
@@ -98,6 +101,33 @@ async def create_service(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/{service_id}", response_model=ServiceTargetUpdateResponse)
+async def update_service(
+    service_id: int,
+    data: ServiceTargetUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(RequireOperator),
+):
+    try:
+        host = data.forward_host
+        port = data.forward_port or 80
+        if data.target:
+            host, port = parse_host_port(data.target, port)
+        if not host:
+            raise ValueError("Target host is required")
+        result = await update_service_target(
+            db,
+            service_id,
+            forward_host=host,
+            forward_port=port,
+            skip_port_check=data.skip_port_check,
+            user_id=user.id,
+        )
+        return ServiceTargetUpdateResponse(**result)
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 

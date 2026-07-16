@@ -55,6 +55,7 @@ WebHost auto-detect matches `internal_target` (normalized `host:port`) to each s
 | GET | `/api/v1/info` | Key limits, usage, endpoint list |
 | GET | `/api/v1/services/template` | Available zones |
 | POST | `/api/v1/services/provision` | DDNS + Caddy SSL for a site |
+| PATCH | `/api/v1/services/{id}` | Update upstream target (`target` or `forward_host`/`forward_port`); reloads Caddy |
 | DELETE | `/api/v1/services/{id}` | Remove proxy (key-owned only) |
 | GET | `/api/v1/records` | List DNS records created by this key |
 | DELETE | `/api/v1/records/{id}` | Remove a key-owned record |

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, History, Zap, ArrowRightLeft } from "lucide-react";
+import { Plus, Trash2, History, Zap, ArrowRightLeft, Pencil, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api, DNSRecord, Domain } from "@/lib/api";
 import { DataTable, TableRow, TableCell } from "@/components/data-table";
@@ -37,6 +37,10 @@ export function RecordsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showMigrate, setShowMigrate] = useState(false);
+  const [editRecord, setEditRecord] = useState<DNSRecord | null>(null);
+  const [editTarget, setEditTarget] = useState("");
+  const [editSkipPort, setEditSkipPort] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
   const { isOperator } = useAuth();
 
   const [form, setForm] = useState({
@@ -94,6 +98,41 @@ export function RecordsPage() {
       await load();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed");
+    }
+  };
+
+  const openEdit = (r: DNSRecord) => {
+    if (!r.proxy_id) {
+      alert("This record has no Caddy proxy to edit. Add a service for this hostname first.");
+      return;
+    }
+    setEditRecord(r);
+    setEditTarget(
+      r.forward_host && r.forward_port != null ? `${r.forward_host}:${r.forward_port}` : ""
+    );
+    setEditSkipPort(false);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editRecord?.proxy_id || editSaving) return;
+    setEditSaving(true);
+    try {
+      const result = await api.updateService(editRecord.proxy_id, {
+        target: editTarget.trim(),
+        skip_port_check: editSkipPort,
+      });
+      setEditRecord(null);
+      await load();
+      alert(
+        result.changed
+          ? `Updated ${result.hostname} → ${result.forward_host}:${result.forward_port}\nCaddy reloaded.`
+          : "No change — target is already set to that value."
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to update target");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -353,6 +392,11 @@ export function RecordsPage() {
                   <Button variant="ghost" size="sm" onClick={() => showHistory(r.id)} title="History">
                     <History className="h-4 w-4" />
                   </Button>
+                  {isOperator && r.proxy_id && (
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(r)} title="Edit internal target">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
                   {isOperator && r.managed && (
                     <Button variant="ghost" size="sm" onClick={() => handleForceUpdate(r.id)} title="Force DDNS update">
                       <Zap className="h-4 w-4" />
@@ -369,6 +413,56 @@ export function RecordsPage() {
           ))}
         </DataTable>
         </>
+      )}
+
+      {editRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !editSaving && setEditRecord(null)} />
+          <div className="relative w-full max-w-md rounded-lg border border-border bg-background p-5 shadow-xl space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">Edit internal target</h3>
+                <p className="text-xs text-muted-foreground font-mono mt-1">{editRecord.hostname}</p>
+              </div>
+              <Button variant="ghost" size="icon" disabled={editSaving} onClick={() => setEditRecord(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>IP:port</Label>
+                <Input
+                  className="font-mono"
+                  value={editTarget}
+                  onChange={(e) => setEditTarget(e.target.value)}
+                  placeholder="10.10.10.4:8932"
+                  required
+                  disabled={editSaving}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Updates the Caddy reverse proxy for this hostname and reloads Caddy.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editSkipPort}
+                  onChange={(e) => setEditSkipPort(e.target.checked)}
+                  disabled={editSaving}
+                />
+                Skip port check
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" disabled={editSaving} onClick={() => setEditRecord(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={editSaving || !editTarget.trim()}>
+                  {editSaving ? "Saving…" : "Save & reload Caddy"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

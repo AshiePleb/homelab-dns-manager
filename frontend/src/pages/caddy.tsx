@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, ExternalLink, ChevronDown, ChevronUp, Shield } from "lucide-react";
+import { RefreshCw, ExternalLink, ChevronDown, ChevronUp, Shield, Pencil, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api, CaddyHost, CaddyStatus, ServiceHealthRow } from "@/lib/api";
 import { DataTable, TableRow, TableCell } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SslCertificatesTable } from "@/components/ssl-certificates-table";
 import { formatDate } from "@/lib/utils";
@@ -43,6 +45,10 @@ export function CaddyPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [message, setMessage] = useState("");
+  const [editHost, setEditHost] = useState<CaddyHost | null>(null);
+  const [editTarget, setEditTarget] = useState("");
+  const [editSkipPort, setEditSkipPort] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
 
   const load = async () => {
     const isRefresh = status !== null;
@@ -88,6 +94,36 @@ export function CaddyPage() {
       setMessage(e instanceof Error ? e.message : "Reload failed");
     } finally {
       setRestarting(false);
+    }
+  };
+
+  const openEdit = (h: CaddyHost) => {
+    setEditHost(h);
+    setEditTarget(`${h.forward_host}:${h.forward_port}`);
+    setEditSkipPort(false);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editHost || editSaving) return;
+    setEditSaving(true);
+    setMessage("");
+    try {
+      const result = await api.updateService(editHost.id, {
+        target: editTarget.trim(),
+        skip_port_check: editSkipPort,
+      });
+      setEditHost(null);
+      setMessage(
+        result.changed
+          ? `Updated ${result.hostname} → ${result.forward_host}:${result.forward_port}`
+          : "No change — target already matches"
+      );
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to update target");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -203,7 +239,7 @@ export function CaddyPage() {
               { key: "port", label: "Backend port" },
               { key: "status", label: "Enabled" },
               { key: "updated", label: "Updated" },
-              { key: "link", label: "" },
+              { key: "actions", label: "", className: "text-right" },
             ]}
             isEmpty={!initialLoading && hosts.length === 0}
             emptyMessage="No Caddy proxy hosts yet — add a service to get started"
@@ -244,16 +280,23 @@ export function CaddyPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{formatDate(h.updated_at)}</TableCell>
-                <TableCell>
-                  <a
-                    href={`https://${h.hostname}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex text-primary hover:opacity-80"
-                    title="Open in browser"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-1">
+                    {isOperator && (
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(h)} title="Edit upstream">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <a
+                      href={`https://${h.hostname}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center h-8 w-8 text-primary hover:opacity-80"
+                      title="Open in browser"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </div>
                 </TableCell>
               </TableRow>
             ))
@@ -308,6 +351,53 @@ export function CaddyPage() {
         </Link>
         .
       </p>
+
+      {editHost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !editSaving && setEditHost(null)} />
+          <div className="relative w-full max-w-md rounded-lg border border-border bg-background p-5 shadow-xl space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold">Edit upstream</h3>
+                <p className="text-xs text-muted-foreground font-mono mt-1">{editHost.hostname}</p>
+              </div>
+              <Button variant="ghost" size="icon" disabled={editSaving} onClick={() => setEditHost(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>IP:port</Label>
+                <Input
+                  className="font-mono"
+                  value={editTarget}
+                  onChange={(e) => setEditTarget(e.target.value)}
+                  placeholder="10.10.10.4:8932"
+                  required
+                  disabled={editSaving}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editSkipPort}
+                  onChange={(e) => setEditSkipPort(e.target.checked)}
+                  disabled={editSaving}
+                />
+                Skip port check
+              </label>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" disabled={editSaving} onClick={() => setEditHost(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={editSaving || !editTarget.trim()}>
+                  {editSaving ? "Saving…" : "Save & reload Caddy"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

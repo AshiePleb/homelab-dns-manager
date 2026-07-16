@@ -14,6 +14,8 @@ from app.schemas import (
     ServiceProvisionResponse,
     ServiceTemplateResponse,
     ServiceListItem,
+    ServiceTargetUpdate,
+    ServiceTargetUpdateResponse,
     PortCheckResult,
 )
 from app.core.deps import get_api_key
@@ -23,6 +25,7 @@ from app.services.service_provision import (
     provision_service,
     list_provisioned_services,
     delete_service,
+    update_service_target,
     get_default_zone,
     parse_host_port,
     build_fqdn,
@@ -55,6 +58,7 @@ async def api_info(
             "template": f"{base}/services/template",
             "provision": f"{base}/services/provision",
             "services": f"{base}/services",
+            "update_service": f"{base}/services/{{proxy_host_id}}",
             "delete_service": f"{base}/services/{{proxy_host_id}}",
             "records": f"{base}/records",
             "delete_record": f"{base}/records/{{record_id}}",
@@ -160,6 +164,35 @@ async def create_service(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch("/services/{service_id}", response_model=ServiceTargetUpdateResponse)
+async def update_service(
+    service_id: int,
+    data: ServiceTargetUpdate,
+    db: AsyncSession = Depends(get_db),
+    api_key: ApiKey = Depends(get_api_key),
+):
+    try:
+        host = data.forward_host
+        port = data.forward_port or 80
+        if data.target:
+            host, port = parse_host_port(data.target, port)
+        if not host:
+            raise ValueError("Target host is required")
+        result = await update_service_target(
+            db,
+            service_id,
+            forward_host=host,
+            forward_port=port,
+            skip_port_check=data.skip_port_check,
+            api_key_id=api_key.id,
+        )
+        return ServiceTargetUpdateResponse(**result)
+    except ValueError as e:
+        detail = str(e)
+        status = 404 if detail == "Service not found" else 400
+        raise HTTPException(status_code=status, detail=detail)
 
 
 @router.delete("/services/{service_id}")
