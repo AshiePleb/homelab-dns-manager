@@ -53,8 +53,8 @@ scheduler = AsyncIOScheduler()
 
 async def seed_admin():
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).where(User.role == UserRole.ADMIN))
-        if result.scalar_one_or_none():
+        result = await db.execute(select(User).where(User.role == UserRole.ADMIN).limit(1))
+        if result.scalars().first():
             return
         admin = User(
             username=settings.admin_username,
