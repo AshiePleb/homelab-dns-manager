@@ -519,6 +519,13 @@ class VersionStatusResponse(BaseModel):
     latest_digest: str | None = None
 
 
+class AppUpdateResponse(BaseModel):
+    status: str
+    image: str
+    target_version: str | None = None
+    message: str
+
+
 class ApiKeyUsage(BaseModel):
     dns_records: int
     services: int

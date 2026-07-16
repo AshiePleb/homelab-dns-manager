@@ -185,6 +185,11 @@ class ApiClient {
     return this.request<VersionStatus>("/system/version");
   }
 
+  updateApp(force = false) {
+    const q = force ? "?force=true" : "";
+    return this.request<AppUpdateResult>(`/system/update${q}`, { method: "POST" });
+  }
+
   getRecentActivity(limit = 10) {
     return this.request<ActivityLog[]>(`/dashboard/activity?limit=${limit}`);
   }
@@ -468,6 +473,13 @@ export interface VersionStatus {
   check_ok: boolean;
   image_digest?: string | null;
   latest_digest?: string | null;
+}
+
+export interface AppUpdateResult {
+  status: string;
+  image: string;
+  target_version?: string | null;
+  message: string;
 }
 
 export interface DashboardStats {
