@@ -14,7 +14,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 USERNAME="${DOCKERHUB_USERNAME:-ashiepleb}"
-REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github.com[:/](.+)(\.git)?$#\1#')"
+REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github.com[:/]##' | sed 's#\.git$##')"
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "Install GitHub CLI first: brew install gh && gh auth login" >&2

@@ -155,7 +155,7 @@ echo "→ Pushing main and tag ${TAG} to GitHub..."
 git -C "$ROOT" push origin main
 git -C "$ROOT" push origin "$TAG"
 
-REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github.com[:/](.+)(\.git)?$#\1#')"
+REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github.com[:/]##' | sed 's#\.git$##')"
 
 # Fail fast if Hub publish secrets are missing (CI would fail after a long build).
 if command -v gh >/dev/null 2>&1; then
