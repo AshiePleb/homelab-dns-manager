@@ -18,18 +18,17 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! docker pull hello-world >/dev/null 2>&1; then
-  :
-fi
-
-# Quick auth check — push will fail with a clear message if not logged in
-if [[ -f "$HOME/.docker/config.json" ]] && ! grep -q '"index.docker.io"' "$HOME/.docker/config.json" 2>/dev/null; then
-  if ! grep -q '"https://index.docker.io/v1/"' "$HOME/.docker/config.json" 2>/dev/null; then
-    echo "Not logged in to Docker Hub. Run:" >&2
-    echo "  docker login -u ashiepleb" >&2
-    echo "Password = access token from https://hub.docker.com/settings/security" >&2
-    exit 1
+# Verify Docker Hub credentials are actually present (stub auths entries are common)
+HAS_CREDS=0
+if command -v docker-credential-desktop >/dev/null 2>&1; then
+  if printf 'https://index.docker.io/v1/\n' | docker-credential-desktop get 2>/dev/null | grep -q '"Username"'; then
+    HAS_CREDS=1
   fi
+fi
+if [[ "$HAS_CREDS" -eq 0 ]]; then
+  echo "Not logged in to Docker Hub (no credentials in Docker Desktop)." >&2
+  echo "Run: ./scripts/setup-publish-auth.sh" >&2
+  exit 1
 fi
 
 echo "→ Building ${IMAGE}:${TAG} and :latest (linux/amd64)"

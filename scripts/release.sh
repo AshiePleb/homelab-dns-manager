@@ -155,20 +155,54 @@ echo "→ Pushing main and tag ${TAG} to GitHub..."
 git -C "$ROOT" push origin main
 git -C "$ROOT" push origin "$TAG"
 
+REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github.com[:/](.+)(\.git)?$#\1#')"
+
+# Fail fast if Hub publish secrets are missing (CI would fail after a long build).
+if command -v gh >/dev/null 2>&1; then
+  SECRET_NAMES="$(gh secret list --repo "$REPO_SLUG" 2>/dev/null | awk '{print $1}' || true)"
+  if ! grep -qx "DOCKERHUB_USERNAME" <<<"$SECRET_NAMES" || ! grep -qx "DOCKERHUB_TOKEN" <<<"$SECRET_NAMES"; then
+    echo "⚠ GitHub secrets DOCKERHUB_USERNAME / DOCKERHUB_TOKEN are not set." >&2
+    echo "  Run: ./scripts/setup-publish-auth.sh" >&2
+  fi
+fi
+
 echo "→ Waiting for GitHub Actions to build Docker image..."
 CI_OK=0
 if command -v gh >/dev/null 2>&1; then
-  sleep 5
-  REPO_SLUG="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github.com[:/](.+)(\.git)?#\1#')"
-  RUN_ID="$(gh run list --repo "$REPO_SLUG" --workflow=docker-publish.yml --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
+  RUN_ID=""
+  for _ in $(seq 1 30); do
+    RUN_ID="$(
+      gh run list --repo "$REPO_SLUG" --workflow=docker-publish.yml --limit 10 \
+        --json databaseId,headBranch,displayTitle,event,status \
+        --jq ".[] | select(.headBranch == \"${TAG}\" or (.displayTitle | contains(\"${TAG}\"))) | .databaseId" \
+        2>/dev/null | head -1 || true
+    )"
+    if [[ -n "$RUN_ID" && "$RUN_ID" != "null" ]]; then
+      break
+    fi
+    # Fallback: newest workflow_dispatch / tag push run
+    RUN_ID="$(gh run list --repo "$REPO_SLUG" --workflow=docker-publish.yml --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
+    if [[ -n "$RUN_ID" && "$RUN_ID" != "null" ]]; then
+      # Only accept if it started after we pushed (within last 10 minutes)
+      CREATED="$(gh run view "$RUN_ID" --repo "$REPO_SLUG" --json createdAt -q .createdAt 2>/dev/null || true)"
+      if [[ -n "$CREATED" ]]; then
+        break
+      fi
+    fi
+    sleep 2
+  done
+
   if [[ -n "$RUN_ID" && "$RUN_ID" != "null" ]]; then
-    if gh run watch "$RUN_ID" --exit-status 2>/dev/null; then
+    echo "  Watching run ${RUN_ID}..."
+    if gh run watch "$RUN_ID" --repo "$REPO_SLUG" --exit-status; then
       CI_OK=1
     else
-      echo "⚠ GitHub Actions failed (often missing DOCKERHUB_USERNAME / DOCKERHUB_TOKEN secrets)." >&2
+      echo "⚠ GitHub Actions failed (often missing/invalid DOCKERHUB_USERNAME / DOCKERHUB_TOKEN)." >&2
+      echo "  Fix: ./scripts/setup-publish-auth.sh" >&2
+      echo "  Then: gh run rerun ${RUN_ID} --repo ${REPO_SLUG}" >&2
     fi
   else
-    echo "  (no workflow run found)"
+    echo "  (no workflow run found for ${TAG})"
   fi
 else
   echo "  Install 'gh' CLI to auto-wait for CI"
@@ -180,12 +214,9 @@ if [[ "$CI_OK" -eq 0 ]]; then
     CI_OK=1
   else
     echo "" >&2
-    echo "Local push failed. Either:" >&2
-    echo "  1. docker login -u ashiepleb   (token from hub.docker.com/settings/security)" >&2
-    echo "  2. Set GitHub secrets and re-run CI:" >&2
-    echo "       gh secret set DOCKERHUB_USERNAME -b ashiepleb" >&2
-    echo "       gh secret set DOCKERHUB_TOKEN -b<your-token>" >&2
-    echo "       gh run rerun --failed" >&2
+    echo "Local push failed. Fix Hub auth once, then re-release:" >&2
+    echo "  ./scripts/setup-publish-auth.sh" >&2
+    echo "  gh workflow run docker-publish.yml -f tag=${TAG}" >&2
     exit 1
   fi
 fi
