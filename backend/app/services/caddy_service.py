@@ -252,8 +252,17 @@ async def probe_https(hostname: str, timeout: float = 4.0) -> tuple[bool, str]:
         return False, str(e) or "HTTPS check failed"
 
 
-async def get_ssl_status(hostname: str, has_proxy: bool, ssl_mode: str | None = None) -> dict:
-    """SSL provider and health for a hostname with an optional Caddy proxy."""
+async def get_ssl_status(
+    hostname: str,
+    has_proxy: bool,
+    ssl_mode: str | None = None,
+    *,
+    https_probe: tuple[bool, str] | None = None,
+) -> dict:
+    """SSL provider and health for a hostname with an optional Caddy proxy.
+
+    Pass https_probe=(ok, message) to reuse an existing HTTPS check and avoid a second probe.
+    """
     if not has_proxy:
         return {
             "ssl_provider": None,
@@ -272,7 +281,7 @@ async def get_ssl_status(hostname: str, has_proxy: bool, ssl_mode: str | None = 
     else:
         label = f"Caddy · {mode}"
     has_cert = has_stored_cert(hostname)
-    https_ok, https_msg = await probe_https(hostname)
+    https_ok, https_msg = https_probe if https_probe is not None else await probe_https(hostname)
 
     if has_cert and https_ok:
         status, message = "active", https_msg

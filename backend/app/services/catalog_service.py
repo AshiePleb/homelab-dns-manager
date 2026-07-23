@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import DNSRecord, ProxyHost
-from app.services.caddy_service import get_cert_expiry, get_cert_issuer, get_ssl_status, probe_https
+from app.services.caddy_service import get_cert_expiry, get_cert_issuer, get_ssl_status
 from app.services.ddns_service import get_public_ip, get_stored_ip
 
 
@@ -46,11 +48,6 @@ async def _catalog_ssl_fields(hostname: str, *, ssl_mode: str | None) -> dict:
     https_ok = ssl["ssl_status"] == "active" or (
         ssl["ssl_status"] == "warning" and "HTTPS OK" in (ssl.get("ssl_message") or "")
     )
-    if ssl["ssl_status"] == "active":
-        https_ok = True
-    elif ssl["ssl_status"] in ("pending", "warning"):
-        probe_ok, _ = await probe_https(hostname)
-        https_ok = https_ok or probe_ok
 
     status = _map_ssl_status_for_catalog(
         internal_status=ssl["ssl_status"],
@@ -118,8 +115,12 @@ async def list_linkable_catalog(db: AsyncSession) -> list[dict]:
 
     stored_public_ip = await get_stored_ip(db)
 
+    ssl_fields_list = await asyncio.gather(
+        *(_catalog_ssl_fields(p.hostname, ssl_mode=p.ssl_mode) for p in proxies)
+    )
+
     catalog: list[dict] = []
-    for proxy in proxies:
+    for proxy, ssl_fields in zip(proxies, ssl_fields_list):
         dns = dns_by_host.get(proxy.hostname)
         owned_via_api = proxy.api_key_id is not None or (dns is not None and dns.api_key_id is not None)
         entry: dict = {
@@ -129,7 +130,7 @@ async def list_linkable_catalog(db: AsyncSession) -> list[dict]:
             "dns_service_id": proxy.id,
             "managed_by": "api" if owned_via_api else "panel",
         }
-        entry.update(await _catalog_ssl_fields(proxy.hostname, ssl_mode=proxy.ssl_mode))
+        entry.update(ssl_fields)
         entry.update(await _catalog_ddns_fields(db, dns, stored_public_ip=stored_public_ip))
         catalog.append(entry)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from datetime import datetime
 
 import docker
@@ -14,6 +15,11 @@ DEFAULT_REPO = "ashiepleb/homelab-dns-manager"
 HUB_TAG_API = "https://hub.docker.com/v2/repositories/{repo}/tags/{tag}"
 HUB_TAGS_API = "https://hub.docker.com/v2/repositories/{repo}/tags"
 SEMVER_TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+
+# Cache Hub lookups — every page load was hitting Docker Hub and slowing the UI.
+_VERSION_CACHE: dict | None = None
+_VERSION_CACHE_AT = 0.0
+_VERSION_CACHE_TTL = 300.0
 
 
 def _parse_hub_time(value: str | None) -> datetime | None:
@@ -106,6 +112,11 @@ def _local_image_digest(repo: str, tag: str = "latest") -> str | None:
 
 
 async def get_version_status() -> dict:
+    global _VERSION_CACHE, _VERSION_CACHE_AT
+    now = time.monotonic()
+    if _VERSION_CACHE is not None and (now - _VERSION_CACHE_AT) < _VERSION_CACHE_TTL:
+        return _VERSION_CACHE
+
     repo = os.getenv("DOCKER_IMAGE_REPO", DEFAULT_REPO)
     raw_version = os.getenv("APP_VERSION", "dev")
     version = normalize_version_tag(raw_version)
@@ -133,7 +144,7 @@ async def get_version_status() -> dict:
     elif local_digest and hub_digest:
         update_available = local_digest != hub_digest
 
-    return {
+    status = {
         "version": version if version else raw_version,
         "build_time": build_time_raw or None,
         "image": f"{repo}:{version or raw_version}",
@@ -146,3 +157,6 @@ async def get_version_status() -> dict:
         "image_digest": local_digest,
         "latest_digest": hub_digest,
     }
+    _VERSION_CACHE = status
+    _VERSION_CACHE_AT = now
+    return status

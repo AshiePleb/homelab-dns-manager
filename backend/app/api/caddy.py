@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
 from app.database import get_db
 from app.models import User, ProxyHost
@@ -48,28 +49,31 @@ async def list_caddy_hosts(
     _: User = Depends(RequireViewer),
 ):
     result = await db.execute(select(ProxyHost).order_by(ProxyHost.hostname))
-    hosts = result.scalars().all()
-    responses = []
-    for h in hosts:
-        ssl = await get_ssl_status(h.hostname, True, h.ssl_mode)
-        responses.append(
-            CaddyHostResponse(
-                id=h.id,
-                hostname=h.hostname,
-                forward_host=h.forward_host,
-                forward_port=h.forward_port,
-                ssl_mode=h.ssl_mode,
-                enabled=h.enabled,
-                port_reachable=h.port_reachable,
-                mapping=f"{h.hostname} → {h.forward_host}:{h.forward_port}",
-                ssl_status=ssl["ssl_status"],
-                ssl_label=ssl["ssl_label"],
-                ssl_message=ssl["ssl_message"],
-                has_cert=ssl["ssl_status"] in ("active", "warning"),
-                updated_at=h.updated_at,
-            )
+    hosts = list(result.scalars().all())
+    if not hosts:
+        return []
+
+    ssl_rows = await asyncio.gather(
+        *(get_ssl_status(h.hostname, True, h.ssl_mode) for h in hosts)
+    )
+    return [
+        CaddyHostResponse(
+            id=h.id,
+            hostname=h.hostname,
+            forward_host=h.forward_host,
+            forward_port=h.forward_port,
+            ssl_mode=h.ssl_mode,
+            enabled=h.enabled,
+            port_reachable=h.port_reachable,
+            mapping=f"{h.hostname} → {h.forward_host}:{h.forward_port}",
+            ssl_status=ssl["ssl_status"],
+            ssl_label=ssl["ssl_label"],
+            ssl_message=ssl["ssl_message"],
+            has_cert=ssl["ssl_status"] in ("active", "warning"),
+            updated_at=h.updated_at,
         )
-    return responses
+        for h, ssl in zip(hosts, ssl_rows)
+    ]
 
 
 @router.get("/config")

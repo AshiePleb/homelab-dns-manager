@@ -83,7 +83,12 @@ async def get_active_session(db: AsyncSession, session_id: str) -> UserSession |
 
 
 async def touch_session(db: AsyncSession, session: UserSession) -> None:
-    session.last_seen_at = _utcnow()
+    # Avoid rewriting last_seen on every API call (was causing SQLite lock contention).
+    now = _utcnow()
+    last = _as_utc(session.last_seen_at)
+    if last and (now - last).total_seconds() < 60:
+        return
+    session.last_seen_at = now
     await db.flush()
 
 
