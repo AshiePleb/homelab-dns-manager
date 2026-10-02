@@ -181,8 +181,9 @@ class ApiClient {
     });
   }
 
-  getVersionStatus() {
-    return this.request<VersionStatus>("/system/version");
+  getVersionStatus(refresh = false) {
+    const q = refresh ? "?refresh=true" : "";
+    return this.request<VersionStatus>(`/system/version${q}`);
   }
 
   updateApp(force = false) {

@@ -34,17 +34,17 @@ export function VersionSettings() {
   const [updating, setUpdating] = useState(false);
   const [updateMsg, setUpdateMsg] = useState("");
 
-  const loadVersion = async () => {
+  const loadVersion = async (refresh = false) => {
     setChecking(true);
     try {
-      setVersion(await api.getVersionStatus());
+      setVersion(await api.getVersionStatus(refresh));
     } finally {
       setChecking(false);
     }
   };
 
   useEffect(() => {
-    void loadVersion();
+    void loadVersion(false);
   }, []);
 
   const latestLabel = version?.latest_version || version?.latest_tag;
@@ -98,7 +98,13 @@ export function VersionSettings() {
             <code className="text-xs">v1.1.0</code>).
           </CardDescription>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void loadVersion()} disabled={checking || updating}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void loadVersion(true)}
+          disabled={checking || updating}
+        >
           <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
           Check
         </Button>

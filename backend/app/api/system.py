@@ -13,8 +13,11 @@ router = APIRouter(prefix="/system", tags=["system"])
 
 
 @router.get("/version", response_model=VersionStatusResponse)
-async def version_status(_: User = Depends(RequireViewer)):
-    return await get_version_status()
+async def version_status(
+    refresh: bool = False,
+    _: User = Depends(RequireViewer),
+):
+    return await get_version_status(refresh=refresh)
 
 
 @router.post("/update", response_model=AppUpdateResponse)

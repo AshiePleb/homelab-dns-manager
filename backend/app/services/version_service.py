@@ -111,10 +111,15 @@ def _local_image_digest(repo: str, tag: str = "latest") -> str | None:
     return None
 
 
-async def get_version_status() -> dict:
+async def get_version_status(*, refresh: bool = False) -> dict:
+    """Return running vs Docker Hub version. Cached 5m unless ``refresh=True`` (Check button)."""
     global _VERSION_CACHE, _VERSION_CACHE_AT
     now = time.monotonic()
-    if _VERSION_CACHE is not None and (now - _VERSION_CACHE_AT) < _VERSION_CACHE_TTL:
+    if (
+        not refresh
+        and _VERSION_CACHE is not None
+        and (now - _VERSION_CACHE_AT) < _VERSION_CACHE_TTL
+    ):
         return _VERSION_CACHE
 
     repo = os.getenv("DOCKER_IMAGE_REPO", DEFAULT_REPO)
