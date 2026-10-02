@@ -3,10 +3,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import ApiKey, User
+from app.models import ApiKey, User, LogLevel
 from app.schemas import ApiKeyCreate, ApiKeyCreatedResponse, ApiKeyResponse, ApiKeyUpdate
 from app.core.deps import RequireAdmin
 from app.services.api_key_service import create_api_key, list_api_keys
+from app.services.settings_service import log_activity
+from app.services.notification_service import send_notifications
 
 router = APIRouter(prefix="/api-keys", tags=["api-keys"])
 
@@ -46,6 +48,11 @@ async def create_key(
         created_by=user.id,
     )
     usage = {"dns_records": 0, "services": 0}
+    await log_activity(
+        db, "api_keys", f"Created API key {row.name}", LogLevel.SUCCESS,
+        details={"name": row.name, "key_prefix": row.key_prefix}, user_id=user.id,
+    )
+    await send_notifications(db, "api_key_changed", {"action": "created", "name": row.name})
     return ApiKeyCreatedResponse(
         id=row.id,
         name=row.name,
@@ -65,7 +72,7 @@ async def update_key(
     key_id: int,
     data: ApiKeyUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(RequireAdmin),
+    user: User = Depends(RequireAdmin),
 ):
     from app.services.api_key_service import get_usage
 
@@ -82,6 +89,11 @@ async def update_key(
     if data.is_active is not None:
         row.is_active = data.is_active
     usage = await get_usage(db, row)
+    await log_activity(
+        db, "api_keys", f"Updated API key {row.name}", LogLevel.INFO,
+        details={"name": row.name, "is_active": row.is_active}, user_id=user.id,
+    )
+    await send_notifications(db, "api_key_changed", {"action": "updated", "name": row.name})
     return ApiKeyResponse(
         id=row.id,
         name=row.name,
@@ -99,11 +111,17 @@ async def update_key(
 async def revoke_key(
     key_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(RequireAdmin),
+    user: User = Depends(RequireAdmin),
 ):
     result = await db.execute(select(ApiKey).where(ApiKey.id == key_id))
     row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="API key not found")
+    name = row.name
     row.is_active = False
+    await log_activity(
+        db, "api_keys", f"Revoked API key {name}", LogLevel.WARNING,
+        details={"name": name}, user_id=user.id,
+    )
+    await send_notifications(db, "api_key_changed", {"action": "revoked", "name": name})
     return {"message": "API key revoked"}

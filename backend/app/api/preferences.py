@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_user
 from app.core.security import verify_password
 from app.database import get_db
-from app.models import User
+from app.models import User, LogLevel
 from app.schemas import (
     UserPreferences,
     UserPreferencesUpdate,
@@ -21,6 +21,8 @@ from app.services.totp_service import (
     store_totp_secret,
     read_totp_secret,
 )
+from app.services.settings_service import log_activity
+from app.services.notification_service import send_notifications
 
 router = APIRouter(prefix="/auth", tags=["preferences"])
 
@@ -80,6 +82,10 @@ async def enable_2fa(
         raise HTTPException(status_code=400, detail="Invalid verification code")
     user.totp_enabled = True
     await db.flush()
+    await log_activity(
+        db, "auth", f"2FA enabled for {user.username}", LogLevel.SUCCESS, user_id=user.id,
+    )
+    await send_notifications(db, "user_changed", {"action": "2fa_enabled", "username": user.username})
     return {"message": "Two-factor authentication enabled"}
 
 
@@ -97,4 +103,8 @@ async def disable_2fa(
     user.totp_enabled = False
     user.totp_secret = None
     await db.flush()
+    await log_activity(
+        db, "auth", f"2FA disabled for {user.username}", LogLevel.WARNING, user_id=user.id,
+    )
+    await send_notifications(db, "user_changed", {"action": "2fa_disabled", "username": user.username})
     return {"message": "Two-factor authentication disabled"}

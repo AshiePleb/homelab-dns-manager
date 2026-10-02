@@ -322,6 +322,16 @@ async def update_service_target(
         details={"hostname": proxy.hostname, "old_target": old_target, "new_target": new_target},
         user_id=user_id,
     )
+    from app.services.notification_service import send_notifications
+    await send_notifications(
+        db,
+        "service_updated",
+        {
+            "hostname": proxy.hostname,
+            "old_target": old_target,
+            "target": new_target,
+        },
+    )
 
     return {
         "id": proxy.id,

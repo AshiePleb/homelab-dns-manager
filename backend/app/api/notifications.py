@@ -3,8 +3,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import User
+from app.schemas import NotificationTestRequest, DiscordEmbedPreviewRequest
 from app.core.deps import RequireAdmin
-from app.services.notification_service import send_discord_webhook, send_email
+from app.services.notification_service import (
+    send_test_notification,
+    preview_embed,
+    EVENT_DEFAULTS,
+    SAMPLE_DATA,
+    DEFAULT_ACCENT,
+)
 from app.services.settings_service import get_settings_dict
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -12,34 +19,40 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 @router.post("/test")
 async def test_notifications(
+    data: NotificationTestRequest = NotificationTestRequest(),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(RequireAdmin),
+):
+    event = data.event or "service_created"
+    results = await send_test_notification(db, event=event)
+    return {"results": results, "event": event}
+
+
+@router.get("/events")
+async def list_notification_events(_: User = Depends(RequireAdmin)):
+    return {
+        "events": [
+            {"id": eid, "default_enabled": default == "true"}
+            for eid, default in EVENT_DEFAULTS.items()
+        ]
+    }
+
+
+@router.post("/discord/preview")
+async def discord_embed_preview(
+    data: DiscordEmbedPreviewRequest,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(RequireAdmin),
 ):
     cfg = await get_settings_dict(db, "notify.")
-    results = []
-
-    webhook = cfg.get("discord_webhook")
-    if webhook:
-        try:
-            await send_discord_webhook(webhook, "✅ HomeLab DNS Manager test notification")
-            results.append({"channel": "discord", "status": "ok"})
-        except Exception as e:
-            results.append({"channel": "discord", "status": "error", "message": str(e)})
-
-    if cfg.get("smtp_host") and cfg.get("smtp_to"):
-        try:
-            await send_email(
-                cfg["smtp_host"],
-                int(cfg.get("smtp_port", "587")),
-                cfg.get("smtp_username", ""),
-                cfg.get("smtp_password", ""),
-                cfg.get("smtp_from", ""),
-                cfg["smtp_to"],
-                "HomeLab DNS Manager Test",
-                "This is a test notification from HomeLab DNS Manager.",
-            )
-            results.append({"channel": "email", "status": "ok"})
-        except Exception as e:
-            results.append({"channel": "email", "status": "error", "message": str(e)})
-
-    return {"results": results}
+    accent = data.accent_color or cfg.get("discord_accent_color") or DEFAULT_ACCENT
+    username = cfg.get("discord_username") or "HomeLab DNS"
+    event = data.event if data.event in EVENT_DEFAULTS else "service_created"
+    embed = preview_embed(event, accent=accent)
+    return {
+        "event": event,
+        "username": username,
+        "accent_color": accent,
+        "sample_data": SAMPLE_DATA.get(event, {}),
+        "embed": embed,
+    }

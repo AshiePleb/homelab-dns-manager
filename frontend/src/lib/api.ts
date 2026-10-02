@@ -284,9 +284,14 @@ class ApiClient {
     return this.request(`/docker/containers/${id}`);
   }
 
-  getLogs(level?: string, limit = 100) {
-    const q = level ? `?level=${level}&limit=${limit}` : `?limit=${limit}`;
-    return this.request<ActivityLog[]>(`/logs${q}`);
+  getLogs(opts?: { level?: string; category?: string; limit?: number; offset?: number }) {
+    const params = new URLSearchParams();
+    if (opts?.level) params.set("level", opts.level);
+    if (opts?.category) params.set("category", opts.category);
+    params.set("limit", String(opts?.limit ?? 100));
+    if (opts?.offset) params.set("offset", String(opts.offset));
+    const q = params.toString();
+    return this.request<ActivityLog[]>(`/logs?${q}`);
   }
 
   getSettings() {
@@ -365,8 +370,31 @@ class ApiClient {
     return this.request("/cloudflare/sync", { method: "POST" });
   }
 
-  testNotifications() {
-    return this.request("/notifications/test", { method: "POST" });
+  testNotifications(event = "service_created") {
+    return this.request<{ results: { channel: string; status: string; message?: string }[]; event: string }>(
+      "/notifications/test",
+      { method: "POST", body: JSON.stringify({ event }) }
+    );
+  }
+
+  previewDiscordEmbed(event: string, accent_color?: string) {
+    return this.request<{
+      event: string;
+      username: string;
+      accent_color: string;
+      sample_data: Record<string, unknown>;
+      embed: {
+        title?: string;
+        description?: string;
+        color?: number;
+        timestamp?: string;
+        footer?: { text: string };
+        fields?: { name: string; value: string; inline?: boolean }[];
+      } | null;
+    }>("/notifications/discord/preview", {
+      method: "POST",
+      body: JSON.stringify({ event, accent_color: accent_color || null }),
+    });
   }
 
   getUsers() {
@@ -513,6 +541,8 @@ export interface ActivityLog {
   category: string;
   message: string;
   details?: Record<string, unknown>;
+  user_id?: number | null;
+  username?: string | null;
   created_at: string;
 }
 
@@ -723,6 +753,9 @@ export interface ServiceItem {
 
 export interface NotificationSettingsView {
   discord_webhook_configured: boolean;
+  discord_format: "plain" | "embed";
+  discord_username?: string | null;
+  discord_accent_color?: string | null;
   smtp_password_configured: boolean;
   smtp_host?: string | null;
   smtp_port: number;
@@ -733,26 +766,51 @@ export interface NotificationSettingsView {
   notify_cf_failure: boolean;
   notify_service_created: boolean;
   notify_service_deleted: boolean;
+  notify_service_updated: boolean;
   notify_record_created: boolean;
   notify_record_deleted: boolean;
+  notify_record_updated: boolean;
   notify_ssl_expiry: boolean;
+  notify_ssl_renewed: boolean;
+  notify_app_update: boolean;
+  notify_zone_synced: boolean;
+  notify_domain_migrated: boolean;
+  notify_login_failed: boolean;
+  notify_user_changed: boolean;
+  notify_api_key_changed: boolean;
+  notify_settings_changed: boolean;
+  notify_backup_restored: boolean;
 }
 
 export interface NotificationSettings {
-  discord_webhook?: string;
-  smtp_host?: string;
+  discord_webhook?: string | null;
+  discord_format?: "plain" | "embed";
+  discord_username?: string | null;
+  discord_accent_color?: string | null;
+  smtp_host?: string | null;
   smtp_port?: number;
-  smtp_username?: string;
-  smtp_password?: string;
-  smtp_from?: string;
-  smtp_to?: string;
+  smtp_username?: string | null;
+  smtp_password?: string | null;
+  smtp_from?: string | null;
+  smtp_to?: string | null;
   notify_ip_change?: boolean;
   notify_cf_failure?: boolean;
   notify_service_created?: boolean;
   notify_service_deleted?: boolean;
+  notify_service_updated?: boolean;
   notify_record_created?: boolean;
   notify_record_deleted?: boolean;
+  notify_record_updated?: boolean;
   notify_ssl_expiry?: boolean;
+  notify_ssl_renewed?: boolean;
+  notify_app_update?: boolean;
+  notify_zone_synced?: boolean;
+  notify_domain_migrated?: boolean;
+  notify_login_failed?: boolean;
+  notify_user_changed?: boolean;
+  notify_api_key_changed?: boolean;
+  notify_settings_changed?: boolean;
+  notify_backup_restored?: boolean;
 }
 
 export interface AppSettings {

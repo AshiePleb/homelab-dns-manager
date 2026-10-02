@@ -10,6 +10,9 @@ import { DomainsPage } from "@/pages/domains";
 import { RecordsPage } from "@/pages/records";
 import { LogsPage } from "@/pages/logs";
 import { SettingsPage } from "@/pages/settings";
+import { NotificationsSettingsPage } from "@/pages/settings/notifications";
+import { DiscordSettingsPage } from "@/pages/settings/discord";
+import { DiscordEmbedPreviewPage } from "@/pages/settings/discord-embed";
 import { CaddyPage } from "@/pages/caddy";
 import { ApiKeysPage } from "@/pages/api-keys";
 
@@ -58,6 +61,9 @@ function AppRoutes() {
         <Route path="api-keys" element={<ApiKeysPage />} />
         <Route path="logs" element={<LogsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/notifications" element={<NotificationsSettingsPage />} />
+        <Route path="settings/notifications/discord" element={<DiscordSettingsPage />} />
+        <Route path="settings/notifications/discord/embed" element={<DiscordEmbedPreviewPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

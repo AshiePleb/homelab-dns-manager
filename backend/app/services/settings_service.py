@@ -83,3 +83,28 @@ async def log_activity(
     db.add(log)
     await db.flush()
     return log
+
+
+async def serialize_activity_logs(db: AsyncSession, logs: list[ActivityLog]) -> list[dict]:
+    """Attach username for UI without N+1 when few distinct actors."""
+    from app.models import User
+
+    user_ids = {log.user_id for log in logs if log.user_id}
+    usernames: dict[int, str] = {}
+    if user_ids:
+        result = await db.execute(select(User).where(User.id.in_(user_ids)))
+        for u in result.scalars().all():
+            usernames[u.id] = u.username
+    return [
+        {
+            "id": log.id,
+            "level": log.level,
+            "category": log.category,
+            "message": log.message,
+            "details": log.details,
+            "user_id": log.user_id,
+            "username": usernames.get(log.user_id) if log.user_id else None,
+            "created_at": log.created_at,
+        }
+        for log in logs
+    ]

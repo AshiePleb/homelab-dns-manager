@@ -33,7 +33,8 @@ from app.services.cloudflare_service import (
 from app.services.ddns_service import get_ddns_status, run_ddns_check, get_managed_hostnames
 from app.services.health_service import get_services_health
 from app.services.health_history_service import get_health_history
-from app.services.settings_service import get_setting, log_activity
+from app.services.settings_service import get_setting, log_activity, serialize_activity_logs
+from app.services.notification_service import send_notifications
 from sqlalchemy import desc
 
 router_domains = APIRouter(prefix="/domains", tags=["domains"])
@@ -100,7 +101,7 @@ async def recent_activity(
     result = await db.execute(
         select(ActivityLog).order_by(desc(ActivityLog.created_at)).limit(limit)
     )
-    return result.scalars().all()
+    return await serialize_activity_logs(db, list(result.scalars().all()))
 
 
 @router_domains.get("", response_model=list[DomainResponse])
@@ -142,6 +143,7 @@ async def sync_all_domains(
     if domains and not await get_default_zone(db):
         apex = min(domains, key=lambda d: len(d.name))
         await set_default_zone(db, apex.name)
+    await send_notifications(db, "zone_synced", {"count": len(domains)})
     return {"synced": len(domains)}
 
 
@@ -149,9 +151,13 @@ async def sync_all_domains(
 async def sync_domain(
     domain_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(RequireOperator),
+    user: User = Depends(RequireOperator),
 ):
     count = await sync_records_for_domain(db, domain_id)
+    await log_activity(
+        db, "dns", f"Synced {count} record(s) for domain #{domain_id}",
+        LogLevel.SUCCESS, details={"domain_id": domain_id, "count": count}, user_id=user.id,
+    )
     return {"synced_records": count}
 
 
@@ -159,13 +165,18 @@ async def sync_domain(
 async def delete_domain(
     domain_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(RequireOperator),
+    user: User = Depends(RequireOperator),
 ):
     result = await db.execute(select(Domain).where(Domain.id == domain_id))
     domain = result.scalar_one_or_none()
     if not domain:
         raise HTTPException(status_code=404, detail="Domain not found")
+    name = domain.name
     await db.delete(domain)
+    await log_activity(
+        db, "dns", f"Deleted domain {name}", LogLevel.WARNING,
+        details={"domain_id": domain_id}, user_id=user.id,
+    )
     return {"message": "Domain deleted"}
 
 
@@ -442,6 +453,12 @@ async def migrate_domain(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    if not data.dry_run and result.get("migrated"):
+        await send_notifications(
+            db,
+            "domain_migrated",
+            {"migrated": result.get("migrated", 0), "target_domain": data.target_domain},
+        )
     return MigrateDomainResponse(**result)
 
 
@@ -479,6 +496,20 @@ async def update_record(
     if data.ttl is not None:
         record.ttl = data.ttl
     await db.flush()
+    await log_activity(
+        db, "dns", f"Updated record {record.hostname}", LogLevel.SUCCESS,
+        details={"hostname": record.hostname, "record_type": record.record_type, "content": record.content},
+        user_id=user.id,
+    )
+    await send_notifications(
+        db,
+        "record_updated",
+        {
+            "hostname": record.hostname,
+            "record_type": record.record_type,
+            "content": record.content,
+        },
+    )
     return DNSRecordResponse(
         id=record.id,
         domain_id=record.domain_id,
@@ -523,7 +554,6 @@ async def delete_record(
             raise HTTPException(status_code=400, detail=str(e))
     await db.delete(record)
     await log_activity(db, "dns", f"Deleted record {record.hostname}", LogLevel.WARNING, user_id=user.id)
-    from app.services.notification_service import send_notifications
     await send_notifications(db, "record_deleted", {"hostname": record.hostname})
     return {"message": "Record deleted"}
 
@@ -599,14 +629,17 @@ async def list_logs(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(RequireViewer),
     level: str | None = None,
+    category: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ):
     query = select(ActivityLog).order_by(desc(ActivityLog.created_at))
     if level:
         query = query.where(ActivityLog.level == level)
-    result = await db.execute(query.offset(offset).limit(limit))
-    return result.scalars().all()
+    if category:
+        query = query.where(ActivityLog.category == category)
+    result = await db.execute(query.offset(offset).limit(min(limit, 500)))
+    return await serialize_activity_logs(db, list(result.scalars().all()))
 
 
 @router_cf.post("/test")
@@ -633,4 +666,5 @@ async def cloudflare_sync(
     total = 0
     for d in domains:
         total += await sync_records_for_domain(db, d.id)
+    await send_notifications(db, "zone_synced", {"count": len(domains)})
     return {"zones": len(domains), "records": total}

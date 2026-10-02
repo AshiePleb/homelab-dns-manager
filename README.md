@@ -139,15 +139,15 @@ This creates a Cloudflare A record (DDNS managed), Caddy reverse proxy with HTTP
 |---------|-------------|
 | **Add Service** | Subdomain + `IP:port` → DNS, DDNS, and Caddy HTTPS in one step |
 | **DNS Records** | Managed records with public IP, internal target, port status, SSL health, bulk actions |
-| **Caddy Proxy** | Proxy hosts, container status, Caddyfile view, manual reload |
+| **Caddy Proxy** | Proxy hosts, SSL cert table, manual renew, Caddyfile view, reload |
 | **DDNS** | Auto-updates subdomain A records when your public IP changes |
 | **Health history** | Service health snapshots on the dashboard (DNS, port, HTTPS, SSL expiry) |
-| **Activity logs** | Full audit trail |
-| **Notifications** | Discord webhooks and SMTP — IP changes, provisioning, CF failures, SSL expiry |
+| **Activity logs** | Full audit trail (ops + security) with category filters, actor, expandable details |
+| **Notifications** | Discord (plain or rich embeds) + SMTP — dedicated settings pages and live embed preview |
 | **Appearance** | Per-user themes (14 options), font size, reduce motion, color-blind mode |
 | **2FA** | TOTP two-factor authentication (Settings → Profile) |
 | **Backup & restore** | Export/import database, Caddy config, and certificates (admin) |
-| **Version check** | Compares running image vs Docker Hub `latest` |
+| **Version check** | Compares running image vs Docker Hub; in-app update pulls and recreates |
 | **Roles** | Admin, Operator, Viewer |
 | **Apex protection** | Never auto-updates `example.com` / `www.example.com` |
 
@@ -184,8 +184,9 @@ Persistent data lives in the Docker volume `homelab_data` (SQLite DB, Caddyfile,
 | **Add Service** | Provision subdomain + target |
 | **Domains** | Sync Cloudflare zones |
 | **DNS Records** | All managed records; bulk enable/disable DDNS, force update, delete |
-| **Caddy Proxy** | Reverse proxy status, hosts, Caddyfile, reload |
-| **Activity Logs** | Audit trail |
+| **Caddy Proxy** | Reverse proxy status, hosts, SSL certs / renew, Caddyfile, reload |
+| **API Keys** | External API keys for integrations (e.g. WebHost Manager) |
+| **Activity Logs** | Ops + security audit trail (filters, actor, details) |
 | **Settings** | Profile, Appearance, General, Cloudflare, Notifications, Users, System |
 
 ### Settings tabs
@@ -195,8 +196,18 @@ Persistent data lives in the Docker volume `homelab_data` (SQLite DB, Caddyfile,
 - **System** (admin) — app version / updates, backup and restore
 - **General** — timezone, DDNS interval, default domain
 - **Cloudflare** — test connection, rotate API token
-- **Notifications** — Discord webhook, SMTP, alert toggles
+- **Notifications** (admin) — opens dedicated pages:
+  - `/settings/notifications` — SMTP + ops/security alert toggles
+  - `/settings/notifications/discord` — webhook, plain vs embed, username, accent color, test send
+  - `/settings/notifications/discord/embed` — live Discord embed preview per event
 - **Users** (admin) — manage users and roles
+
+### Notification events (examples)
+
+| Group | Examples |
+|-------|----------|
+| **Ops** | IP change, Cloudflare failure, service create/update/delete, DNS create/update/delete, SSL expiry/renew, app update, zone sync, domain migrate |
+| **Security / admin** | Failed login, user changes, API key changes, settings changes, backup restore |
 
 ---
 

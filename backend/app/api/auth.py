@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import User
+from app.models import User, LogLevel
 from app.schemas import Token, LoginRequest, UserResponse, PasswordChange, OnboardingRequest, ProfileUpdate, ProfileUpdateResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.security import verify_password, hash_password, create_access_token, password_needs_rehash, decode_access_token
@@ -15,6 +15,8 @@ from app.services.session_service import (
     revoke_user_sessions,
 )
 from app.services.totp_service import read_totp_secret, verify_totp
+from app.services.settings_service import log_activity
+from app.services.notification_service import send_notifications
 from app.api.preferences import build_user_response
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -40,8 +42,24 @@ async def login(
     result = await db.execute(select(User).where(User.username == data.username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.hashed_password):
+        await log_activity(
+            db, "auth", f"Failed login for {data.username}", LogLevel.WARNING,
+            details={"username": data.username, "reason": "Invalid credentials", "ip": _client_ip(request)},
+        )
+        await send_notifications(
+            db, "login_failed",
+            {"username": data.username, "reason": "Invalid credentials"},
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
+        await log_activity(
+            db, "auth", f"Failed login for {data.username} (disabled)", LogLevel.WARNING,
+            details={"username": data.username, "reason": "Account disabled"},
+        )
+        await send_notifications(
+            db, "login_failed",
+            {"username": data.username, "reason": "Account disabled"},
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
 
     if user.totp_enabled:
@@ -52,6 +70,15 @@ async def login(
                 detail="2FA code required",
             )
         if not secret or not verify_totp(secret, data.totp_code):
+            await log_activity(
+                db, "auth", f"Failed login for {data.username} (2FA)", LogLevel.WARNING,
+                details={"username": data.username, "reason": "Invalid 2FA code"},
+                user_id=user.id,
+            )
+            await send_notifications(
+                db, "login_failed",
+                {"username": data.username, "reason": "Invalid 2FA code"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid 2FA code",
@@ -70,6 +97,10 @@ async def login(
         {"sub": user.username, "role": user.role.value},
         session_id=session.id,
     )
+    await log_activity(
+        db, "auth", f"User {user.username} signed in", LogLevel.SUCCESS,
+        details={"ip": _client_ip(request)}, user_id=user.id,
+    )
     return Token(access_token=token, expires_at=session.expires_at)
 
 
@@ -78,10 +109,22 @@ async def logout(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ):
+    username = None
+    user_id = None
     if credentials:
         payload = decode_access_token(credentials.credentials)
-        if payload and payload.get("sid"):
-            await revoke_session(db, payload["sid"])
+        if payload:
+            username = payload.get("sub")
+            if payload.get("sid"):
+                await revoke_session(db, payload["sid"])
+            if username:
+                result = await db.execute(select(User).where(User.username == username))
+                u = result.scalar_one_or_none()
+                if u:
+                    user_id = u.id
+    await log_activity(
+        db, "auth", f"User {username or 'unknown'} signed out", LogLevel.INFO, user_id=user_id,
+    )
     return {"message": "Signed out"}
 
 
@@ -112,6 +155,9 @@ async def complete_onboarding(
         session_id = payload.get("sid") if payload else None
     await revoke_user_sessions(db, user.id, except_session_id=session_id)
     await db.flush()
+    await log_activity(
+        db, "auth", f"Onboarding completed for {user.username}", LogLevel.SUCCESS, user_id=user.id,
+    )
     return user
 
 
@@ -131,6 +177,9 @@ async def change_password(
         session_id = payload.get("sid") if payload else None
     await revoke_user_sessions(db, user.id, except_session_id=session_id)
     await db.flush()
+    await log_activity(
+        db, "auth", f"Password changed for {user.username}", LogLevel.INFO, user_id=user.id,
+    )
     return {"message": "Password updated"}
 
 

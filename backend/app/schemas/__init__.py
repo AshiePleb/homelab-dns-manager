@@ -212,6 +212,8 @@ class ActivityLogResponse(BaseModel):
     category: str
     message: str
     details: dict | None
+    user_id: int | None = None
+    username: str | None = None
     created_at: datetime
 
     class Config:
@@ -231,6 +233,9 @@ class NPMSettings(BaseModel):
 
 class NotificationSettings(BaseModel):
     discord_webhook: str | None = None
+    discord_format: str = "embed"
+    discord_username: str | None = None
+    discord_accent_color: str | None = "#5865F2"
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
@@ -241,13 +246,27 @@ class NotificationSettings(BaseModel):
     notify_cf_failure: bool = True
     notify_service_created: bool = True
     notify_service_deleted: bool = False
+    notify_service_updated: bool = True
     notify_record_created: bool = True
     notify_record_deleted: bool = False
+    notify_record_updated: bool = False
     notify_ssl_expiry: bool = True
+    notify_ssl_renewed: bool = True
+    notify_app_update: bool = True
+    notify_zone_synced: bool = False
+    notify_domain_migrated: bool = False
+    notify_login_failed: bool = True
+    notify_user_changed: bool = False
+    notify_api_key_changed: bool = False
+    notify_settings_changed: bool = False
+    notify_backup_restored: bool = False
 
 
 class NotificationSettingsView(BaseModel):
     discord_webhook_configured: bool = False
+    discord_format: str = "embed"
+    discord_username: str | None = None
+    discord_accent_color: str | None = "#5865F2"
     smtp_password_configured: bool = False
     smtp_host: str | None = None
     smtp_port: int = 587
@@ -258,9 +277,29 @@ class NotificationSettingsView(BaseModel):
     notify_cf_failure: bool = True
     notify_service_created: bool = True
     notify_service_deleted: bool = False
+    notify_service_updated: bool = True
     notify_record_created: bool = True
     notify_record_deleted: bool = False
+    notify_record_updated: bool = False
     notify_ssl_expiry: bool = True
+    notify_ssl_renewed: bool = True
+    notify_app_update: bool = True
+    notify_zone_synced: bool = False
+    notify_domain_migrated: bool = False
+    notify_login_failed: bool = True
+    notify_user_changed: bool = False
+    notify_api_key_changed: bool = False
+    notify_settings_changed: bool = False
+    notify_backup_restored: bool = False
+
+
+class NotificationTestRequest(BaseModel):
+    event: str = "service_created"
+
+
+class DiscordEmbedPreviewRequest(BaseModel):
+    event: str = "service_created"
+    accent_color: str | None = None
 
 
 class GeneralSettings(BaseModel):

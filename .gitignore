@@ -33,6 +33,8 @@ dist/
 # Maintainer-only (keep locally; not for the public repo)
 PUBLISHING.md
 DOCKERHUB.md
+DOCKEROVERVIRW.MD
+DOCKEROVERVIEW.MD
 scripts/*
 !scripts/release.sh
 !scripts/deploy-vps.sh

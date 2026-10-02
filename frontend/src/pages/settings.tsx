@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2, X } from "lucide-react";
-import { useLocation } from "react-router-dom";
-import { api, AppSettings, NotificationSettingsView, User } from "@/lib/api";
+import { Pencil, Plus, Trash2, X, ArrowRight } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { api, AppSettings, User } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,49 +36,12 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: "Viewer — read only",
 };
 
-const NOTIFICATION_EVENTS = [
-  {
-    key: "notify_ip_change" as const,
-    title: "Public IP changed",
-    description: "When DDNS detects your home IP has changed and updates records.",
-  },
-  {
-    key: "notify_cf_failure" as const,
-    title: "Cloudflare update failed",
-    description: "When a DNS sync or record update to Cloudflare fails.",
-  },
-  {
-    key: "notify_service_created" as const,
-    title: "New service provisioned",
-    description: "When you add a service (DNS + Caddy proxy) via Add Service.",
-  },
-  {
-    key: "notify_record_created" as const,
-    title: "New DNS record",
-    description: "When a DNS record is created in the app (manual or via provisioning).",
-  },
-  {
-    key: "notify_service_deleted" as const,
-    title: "Service removed",
-    description: "When a Caddy proxy / homelab service is deleted.",
-  },
-  {
-    key: "notify_record_deleted" as const,
-    title: "DNS record removed",
-    description: "When a DNS record is deleted from the app.",
-  },
-  {
-    key: "notify_ssl_expiry" as const,
-    title: "SSL certificate expiring",
-    description: "When a Let's Encrypt certificate managed by Caddy is close to expiry.",
-  },
-];
-
 const selectClass =
   "flex h-9 w-full rounded-md border border-input bg-secondary/50 px-3 text-sm disabled:opacity-50";
 
 export function SettingsPage() {
   const { isAdmin, user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<TabId>("profile");
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -94,31 +57,26 @@ export function SettingsPage() {
   const [cloudflare, setCloudflare] = useState({ api_token: "" });
   const [showCfTokenRotate, setShowCfTokenRotate] = useState(false);
   const [profile, setProfile] = useState({ username: "", name: "", email: "", current_password: "" });
-  const [notifyView, setNotifyView] = useState<NotificationSettingsView | null>(null);
-  const [notify, setNotify] = useState({
-    discord_webhook: "",
-    smtp_host: "",
-    smtp_port: 587,
-    smtp_username: "",
-    smtp_password: "",
-    smtp_from: "",
-    smtp_to: "",
-    notify_ip_change: true,
-    notify_cf_failure: true,
-    notify_service_created: true,
-    notify_service_deleted: false,
-    notify_record_created: true,
-    notify_record_deleted: false,
-    notify_ssl_expiry: true,
-  });
   const [passwords, setPasswords] = useState({ current: "", new: "" });
 
   const location = useLocation();
 
   useEffect(() => {
     const requested = (location.state as { tab?: TabId } | null)?.tab;
+    if (requested === "notifications") {
+      navigate("/settings/notifications", { replace: true });
+      return;
+    }
     if (requested) setTab(requested);
-  }, [location.state]);
+  }, [location.state, navigate]);
+
+  const selectTab = (id: TabId) => {
+    if (id === "notifications") {
+      navigate("/settings/notifications");
+      return;
+    }
+    setTab(id);
+  };
 
   const [userPanel, setUserPanel] = useState<"closed" | "create" | "edit">("closed");
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -148,28 +106,6 @@ export function SettingsPage() {
     setTimeout(() => setMessage(""), 5000);
   };
 
-  const loadNotifications = async () => {
-    const view = await api.getNotificationSettings();
-    setNotifyView(view);
-    setNotify((n) => ({
-      ...n,
-      discord_webhook: "",
-      smtp_host: view.smtp_host || "",
-      smtp_port: view.smtp_port,
-      smtp_username: view.smtp_username || "",
-      smtp_password: "",
-      smtp_from: view.smtp_from || "",
-      smtp_to: view.smtp_to || "",
-      notify_ip_change: view.notify_ip_change,
-      notify_cf_failure: view.notify_cf_failure,
-      notify_service_created: view.notify_service_created,
-      notify_service_deleted: view.notify_service_deleted,
-      notify_record_created: view.notify_record_created,
-      notify_record_deleted: view.notify_record_deleted,
-      notify_ssl_expiry: view.notify_ssl_expiry,
-    }));
-  };
-
   useEffect(() => {
     api.getSettings().then((s) => {
       setSettings(s);
@@ -182,7 +118,6 @@ export function SettingsPage() {
     api.getZoneNames().then(setZoneNames).catch(() => {});
     if (isAdmin) {
       api.getUsers().then(setUsers);
-      loadNotifications().catch(() => {});
     }
   }, [isAdmin]);
 
@@ -263,51 +198,6 @@ export function SettingsPage() {
       showMsg("Profile updated");
     } catch (e) {
       showMsg(e instanceof Error ? e.message : "Failed");
-    }
-  };
-
-  const saveNotify = async () => {
-    setSaving("notify");
-    try {
-      const payload: Record<string, unknown> = {
-        smtp_host: notify.smtp_host || null,
-        smtp_port: notify.smtp_port,
-        smtp_username: notify.smtp_username || null,
-        smtp_from: notify.smtp_from || null,
-        smtp_to: notify.smtp_to || null,
-        notify_ip_change: notify.notify_ip_change,
-        notify_cf_failure: notify.notify_cf_failure,
-        notify_service_created: notify.notify_service_created,
-        notify_service_deleted: notify.notify_service_deleted,
-        notify_record_created: notify.notify_record_created,
-        notify_record_deleted: notify.notify_record_deleted,
-        notify_ssl_expiry: notify.notify_ssl_expiry,
-      };
-      if (notify.discord_webhook.trim()) payload.discord_webhook = notify.discord_webhook.trim();
-      if (notify.smtp_password.trim()) payload.smtp_password = notify.smtp_password.trim();
-      await api.updateNotifications(payload);
-      await loadNotifications();
-      showMsg("Notification settings saved");
-    } catch (e) {
-      showMsg(e instanceof Error ? e.message : "Failed to save notifications");
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  const testNotify = async () => {
-    setSaving("notify-test");
-    try {
-      const result = await api.testNotifications();
-      const parts = (result as { results: { channel: string; status: string; message?: string }[] }).results.map(
-        (r: { channel: string; status: string; message?: string }) =>
-          `${r.channel}: ${r.status}${r.message ? ` (${r.message})` : ""}`
-      );
-      showMsg(parts.length ? parts.join(" · ") : "No channels configured — add a Discord webhook or SMTP first");
-    } catch (e) {
-      showMsg(e instanceof Error ? e.message : "Test failed");
-    } finally {
-      setSaving(null);
     }
   };
 
@@ -429,7 +319,7 @@ export function SettingsPage() {
           <button
             key={t.id}
             type="button"
-            onClick={() => setTab(t.id)}
+            onClick={() => selectTab(t.id)}
             className={cn(
               "rounded-t-md px-4 py-2 text-sm font-medium transition-colors -mb-px border-b-2",
               tab === t.id
@@ -672,155 +562,22 @@ export function SettingsPage() {
       )}
 
       {tab === "notifications" && isAdmin && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>How notifications work</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>
-                When something important happens (IP change, new service, Cloudflare error, etc.), the app
-                sends a message to every channel you configure below. At least one channel is required for
-                alerts to go out.
-              </p>
-              <ul className="list-disc pl-5 space-y-1">
-                <li>
-                  <strong className="text-foreground">Discord webhook</strong> — In Discord: Server Settings →
-                  Integrations → Webhooks → New Webhook. Copy the URL and paste it here. The app POSTs a JSON
-                  payload to that URL (no bot needed).
-                </li>
-                <li>
-                  <strong className="text-foreground">Email (SMTP)</strong> — Optional backup. Uses STARTTLS on
-                  the port you set (587 by default).
-                </li>
-              </ul>
-              <p>
-                Use <strong>Send test</strong> after saving to confirm delivery. Toggle each event type
-                independently.
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle>Channels</CardTitle>
-                  <CardDescription>Discord webhook and optional SMTP email</CardDescription>
-                </div>
-                <Badge variant={notifyView?.discord_webhook_configured ? "success" : "secondary"}>
-                  Discord {notifyView?.discord_webhook_configured ? "on" : "off"}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Discord webhook URL</Label>
-                <Input
-                  type="password"
-                  placeholder={
-                    notifyView?.discord_webhook_configured
-                      ? "Webhook saved — paste new URL to replace"
-                      : "https://discord.com/api/webhooks/…"
-                  }
-                  value={notify.discord_webhook}
-                  onChange={(e) => setNotify({ ...notify, discord_webhook: e.target.value })}
-                />
-                {notifyView?.discord_webhook_configured && !notify.discord_webhook && (
-                  <p className="text-xs text-muted-foreground">Leave blank to keep the existing webhook</p>
-                )}
-              </div>
-
-              <div className="border-t border-border pt-4">
-                <p className="text-sm font-medium mb-3">SMTP email (optional)</p>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>SMTP host</Label>
-                    <Input
-                      value={notify.smtp_host}
-                      onChange={(e) => setNotify({ ...notify, smtp_host: e.target.value })}
-                      placeholder="smtp.gmail.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>SMTP port</Label>
-                    <Input
-                      type="number"
-                      value={notify.smtp_port}
-                      onChange={(e) => setNotify({ ...notify, smtp_port: Number(e.target.value) })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>SMTP username</Label>
-                    <Input
-                      value={notify.smtp_username}
-                      onChange={(e) => setNotify({ ...notify, smtp_username: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>SMTP password</Label>
-                    <Input
-                      type="password"
-                      placeholder={
-                        notifyView?.smtp_password_configured ? "Saved — enter to replace" : "App password"
-                      }
-                      value={notify.smtp_password}
-                      onChange={(e) => setNotify({ ...notify, smtp_password: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>From address</Label>
-                    <Input
-                      value={notify.smtp_from}
-                      onChange={(e) => setNotify({ ...notify, smtp_from: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>To address</Label>
-                    <Input
-                      value={notify.smtp_to}
-                      onChange={(e) => setNotify({ ...notify, smtp_to: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Alert events</CardTitle>
-              <CardDescription>Choose which events trigger notifications</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {NOTIFICATION_EVENTS.map((ev) => (
-                <label
-                  key={ev.key}
-                  className="flex items-start gap-3 rounded-md border border-border px-4 py-3 cursor-pointer hover:bg-secondary/30"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={notify[ev.key]}
-                    onChange={(e) => setNotify({ ...notify, [ev.key]: e.target.checked })}
-                  />
-                  <div>
-                    <p className="text-sm font-medium">{ev.title}</p>
-                    <p className="text-xs text-muted-foreground">{ev.description}</p>
-                  </div>
-                </label>
-              ))}
-              <div className="flex gap-2 pt-2">
-                <Button onClick={saveNotify} disabled={saving === "notify"}>
-                  {saving === "notify" ? "Saving…" : "Save notifications"}
-                </Button>
-                <Button variant="outline" onClick={testNotify} disabled={saving === "notify-test"}>
-                  {saving === "notify-test" ? "Sending…" : "Send test"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Notifications moved</CardTitle>
+            <CardDescription>
+              Discord, SMTP, and alert toggles now live on a dedicated page — including a live embed preview.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link to="/settings/notifications">
+                Open notifications settings
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {tab === "users" && isAdmin && (

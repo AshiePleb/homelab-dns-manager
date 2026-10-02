@@ -24,6 +24,7 @@ from app.services.caddy_service import (
     prepare_expiring_cert_renewals,
 )
 from app.services.settings_service import log_activity
+from app.services.notification_service import send_notifications
 from app.config import get_settings
 
 router = APIRouter(prefix="/caddy", tags=["caddy"])
@@ -141,6 +142,9 @@ async def renew_certificate(
         details=result,
         user_id=user.id,
     )
+    await send_notifications(
+        db, "ssl_renewed", {"hostname": result["hostname"], "count": 1},
+    )
     return CertRenewResponse(**result)
 
 
@@ -166,4 +170,10 @@ async def renew_expiring_certificates(
         details={"within_days": data.within_days, "renewed_count": result["renewed_count"]},
         user_id=user.id,
     )
+    if result.get("renewed_count"):
+        await send_notifications(
+            db,
+            "ssl_renewed",
+            {"count": result["renewed_count"], "hostname": None},
+        )
     return CertRenewExpiringResponse(**result)

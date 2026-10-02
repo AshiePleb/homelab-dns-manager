@@ -8,6 +8,7 @@ from app.schemas import VersionStatusResponse, AppUpdateResponse
 from app.services.version_service import get_version_status
 from app.services.update_service import start_app_update
 from app.services.settings_service import log_activity
+from app.services.notification_service import send_notifications
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -36,6 +37,14 @@ async def update_app(
             LogLevel.INFO,
             details=result,
             user_id=user.id,
+        )
+        await send_notifications(
+            db,
+            "app_update",
+            {
+                "target_version": result.get("target_version"),
+                "image": result.get("image"),
+            },
         )
         await db.commit()
         return result
