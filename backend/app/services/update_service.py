@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
-import time
+import shlex
 
 import docker
 from docker.errors import DockerException, ImageNotFound, NotFound
@@ -17,6 +16,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 APP_CONTAINER_NAME = os.getenv("APP_CONTAINER_NAME", "homelab-dns-manager")
+UPDATER_IMAGE = os.getenv("DOCKER_UPDATER_IMAGE", "docker:27-cli")
 
 
 def _client() -> docker.DockerClient:
@@ -54,16 +54,35 @@ def pull_app_image(image: str) -> str:
     return f"{repo}:{tag}"
 
 
-def _recreate_container(image: str) -> None:
+def _get_app_container():
     client = _client()
     try:
-        old = client.containers.get(APP_CONTAINER_NAME)
+        return client.containers.get(APP_CONTAINER_NAME)
     except NotFound:
-        # Fall back to this process's container ID (HOSTNAME in Docker)
         hostname = os.getenv("HOSTNAME", "")
         if not hostname:
             raise RuntimeError(f"Container {APP_CONTAINER_NAME} not found")
-        old = client.containers.get(hostname)
+        return client.containers.get(hostname)
+
+
+def _compose_context(attrs: dict) -> tuple[str | None, str | None]:
+    labels = (attrs.get("Config") or {}).get("Labels") or {}
+    workdir = (
+        labels.get("com.docker.compose.project.working_dir")
+        or os.getenv("COMPOSE_WORKING_DIR")
+        or ""
+    ).strip() or None
+    service = (
+        labels.get("com.docker.compose.service")
+        or os.getenv("COMPOSE_SERVICE")
+        or "homelab-dns"
+    ).strip()
+    return workdir, service
+
+
+def _recreate_container(image: str) -> None:
+    client = _client()
+    old = _get_app_container()
 
     attrs = old.attrs
     config = attrs.get("Config") or {}
@@ -169,17 +188,78 @@ def _recreate_container(image: str) -> None:
         logger.warning("Could not remove pre-update container: %s", e)
 
 
+def _remove_updater_if_present(client: docker.DockerClient) -> None:
+    helper_name = f"{APP_CONTAINER_NAME}-updater"
+    try:
+        client.containers.get(helper_name).remove(force=True)
+    except NotFound:
+        pass
+    except DockerException:
+        pass
+
+
 def schedule_self_update(image: str) -> None:
-    """Pull is assumed done; recreate after a short delay so HTTP can respond."""
+    """Recreate via an external helper so stopping this container cannot abort the update.
 
-    def _run() -> None:
-        time.sleep(1.5)
+    In-process threads die when the app container is stopped mid-recreate (left the
+    VPS with only ``*-pre-update`` and a 502 through Caddy).
+    """
+    client = _client()
+    old = _get_app_container()
+    workdir, service = _compose_context(old.attrs)
+    _remove_updater_if_present(client)
+    helper_name = f"{APP_CONTAINER_NAME}-updater"
+
+    if workdir:
+        # Preferred path for docker compose installs
         try:
-            _recreate_container(image)
-        except Exception:
-            logger.exception("Self-update recreate failed")
+            client.images.pull(UPDATER_IMAGE.split(":")[0], tag=UPDATER_IMAGE.split(":")[-1] if ":" in UPDATER_IMAGE else "latest")
+        except DockerException as e:
+            logger.warning("Could not pull updater image %s: %s", UPDATER_IMAGE, e)
 
-    threading.Thread(target=_run, name="homelab-self-update", daemon=True).start()
+        cmd = (
+            f"sleep 2 && cd {shlex.quote(workdir)} && "
+            f"docker compose pull {shlex.quote(service)} && "
+            f"docker compose up -d --force-recreate --no-deps {shlex.quote(service)}"
+        )
+        logger.info("Scheduling compose self-update via %s in %s", UPDATER_IMAGE, workdir)
+        client.containers.run(
+            UPDATER_IMAGE,
+            entrypoint="sh",
+            command=["-c", cmd],
+            volumes={
+                "/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"},
+                workdir: {"bind": workdir, "mode": "ro"},
+            },
+            detach=True,
+            remove=True,
+            name=helper_name,
+        )
+        return
+
+    # Fallback: run recreate code in a sibling of this image (survives app stop)
+    py = (
+        "import time;"
+        "time.sleep(2);"
+        "from app.services.update_service import _recreate_container;"
+        f"_recreate_container({image!r})"
+    )
+    logger.info("Scheduling API self-update via sibling container %s", image)
+    client.containers.run(
+        image,
+        entrypoint="python",
+        command=["-c", py],
+        volumes={"/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"}},
+        environment={
+            "DOCKER_SOCKET": "/var/run/docker.sock",
+            "APP_CONTAINER_NAME": APP_CONTAINER_NAME,
+            "PYTHONPATH": "/app/backend",
+        },
+        working_dir="/app/backend",
+        detach=True,
+        remove=True,
+        name=helper_name,
+    )
 
 
 async def start_app_update(*, force: bool = False) -> dict:
@@ -187,7 +267,7 @@ async def start_app_update(*, force: bool = False) -> dict:
     Pull newest image and schedule container recreate.
     Returns immediately; the process will be replaced shortly after.
     """
-    status = await get_version_status()
+    status = await get_version_status(refresh=True)
     if not force and not status.get("update_available"):
         raise ValueError("Already up to date")
 
