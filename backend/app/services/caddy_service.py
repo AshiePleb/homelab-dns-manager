@@ -236,6 +236,75 @@ def remove_stored_cert(hostname: str) -> bool:
     return removed
 
 
+def list_stored_cert_hostnames() -> list[str]:
+    """Hostnames that have an on-disk ACME certificate under any issuer."""
+    certs_root = CADDY_DIR / "certificates"
+    if not certs_root.is_dir():
+        return []
+    found: set[str] = set()
+    for issuer_dir in certs_root.iterdir():
+        if not issuer_dir.is_dir():
+            continue
+        for host_dir in issuer_dir.iterdir():
+            if host_dir.is_dir() and (host_dir / f"{host_dir.name}.crt").is_file():
+                found.add(host_dir.name)
+    return sorted(found)
+
+
+def prepare_cert_renewal(hostname: str) -> dict:
+    """Delete stored cert so the next Caddy start re-issues via ACME.
+
+    Does not restart Caddy — callers should schedule ``reload_caddy`` after the
+    HTTP response (same reason as service provision).
+    """
+    host = hostname.strip().lower().rstrip(".")
+    if not host:
+        raise ValueError("Hostname is required")
+    expiry = get_cert_expiry(host)
+    removed = remove_stored_cert(host)
+    return {
+        "hostname": host,
+        "cert_removed": removed,
+        "had_cert": expiry is not None or removed,
+        "previous_expires_at": expiry["expires_at"].isoformat() if expiry else None,
+        "previous_days_remaining": expiry["days_remaining"] if expiry else None,
+        "reload_pending": True,
+        "message": (
+            f"Certificate for {host} cleared — Caddy will re-issue on reload"
+            if removed or expiry
+            else f"No on-disk certificate for {host} — Caddy will attempt issue on reload"
+        ),
+    }
+
+
+def prepare_expiring_cert_renewals(within_days: int = 14) -> dict:
+    """Clear on-disk certs expiring within ``within_days`` for force re-issue."""
+    if within_days < 0:
+        raise ValueError("within_days must be >= 0")
+    renewed: list[dict] = []
+    skipped: list[str] = []
+    for host in list_stored_cert_hostnames():
+        expiry = get_cert_expiry(host)
+        if not expiry:
+            continue
+        if expiry["days_remaining"] <= within_days:
+            renewed.append(prepare_cert_renewal(host))
+        else:
+            skipped.append(host)
+    return {
+        "within_days": within_days,
+        "renewed_count": len(renewed),
+        "skipped_count": len(skipped),
+        "renewed": renewed,
+        "reload_pending": len(renewed) > 0,
+        "message": (
+            f"Cleared {len(renewed)} certificate(s) expiring within {within_days} days"
+            if renewed
+            else f"No certificates expiring within {within_days} days"
+        ),
+    }
+
+
 async def probe_https(hostname: str, timeout: float = 4.0) -> tuple[bool, str]:
     """HEAD request to verify HTTPS is reachable."""
     try:

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -22,6 +22,7 @@ from app.services.service_provision import (
     parse_host_port,
     build_fqdn,
 )
+from app.services.caddy_service import reload_caddy
 from app.services.port_check import check_port
 from app.services.cloudflare_service import sync_zones
 from sqlalchemy import select
@@ -73,6 +74,7 @@ async def check_target_port(
 @router.post("/provision", response_model=ServiceProvisionResponse)
 async def create_service(
     data: ServiceProvisionRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RequireOperator),
 ):
@@ -95,8 +97,11 @@ async def create_service(
             create_dns=data.create_dns,
             create_proxy=data.create_proxy,
             skip_port_check=data.skip_port_check,
+            defer_caddy_reload=True,
             user_id=user.id,
         )
+        if result.get("caddy_reload_pending"):
+            background_tasks.add_task(reload_caddy)
         return ServiceProvisionResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -108,6 +113,7 @@ async def create_service(
 async def update_service(
     service_id: int,
     data: ServiceTargetUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RequireOperator),
 ):
@@ -124,8 +130,11 @@ async def update_service(
             forward_host=host,
             forward_port=port,
             skip_port_check=data.skip_port_check,
+            defer_caddy_reload=True,
             user_id=user.id,
         )
+        if result.get("caddy_reload_pending"):
+            background_tasks.add_task(reload_caddy)
         return ServiceTargetUpdateResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -134,11 +143,14 @@ async def update_service(
 @router.delete("/{service_id}")
 async def remove_service(
     service_id: int,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(RequireOperator),
 ):
     try:
-        await delete_service(db, service_id, user_id=user.id)
+        result = await delete_service(db, service_id, user_id=user.id, defer_caddy_reload=True)
+        if result.get("caddy_reload_pending"):
+            background_tasks.add_task(reload_caddy)
         return {"message": "Service removed"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

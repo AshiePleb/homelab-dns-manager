@@ -1,18 +1,29 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 
 from app.database import get_db
-from app.models import User, ProxyHost
-from app.schemas import CaddyStatusResponse, CaddyHostResponse
+from app.models import User, ProxyHost, LogLevel
+from app.schemas import (
+    CaddyStatusResponse,
+    CaddyHostResponse,
+    CertRenewRequest,
+    CertRenewResponse,
+    CertRenewExpiringRequest,
+    CertRenewExpiringResponse,
+)
 from app.core.deps import RequireViewer, RequireOperator
 from app.services.caddy_service import (
     get_container_status,
     read_caddyfile,
     get_ssl_status,
-    sync_and_reload,
+    reload_caddy,
+    write_all_sites,
+    prepare_cert_renewal,
+    prepare_expiring_cert_renewals,
 )
+from app.services.settings_service import log_activity
 from app.config import get_settings
 
 router = APIRouter(prefix="/caddy", tags=["caddy"])
@@ -86,8 +97,73 @@ async def get_caddy_config(
 
 @router.post("/reload")
 async def reload_caddy_proxy(
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(RequireOperator),
 ):
-    result = await sync_and_reload(db)
-    return result
+    # Write config now; restart after response so the UI connection survives.
+    result = await db.execute(select(ProxyHost).where(ProxyHost.enabled == True))
+    hosts = result.scalars().all()
+    write_all_sites(
+        [
+            {
+                "hostname": h.hostname,
+                "forward_host": h.forward_host,
+                "forward_port": h.forward_port,
+                "ssl_mode": h.ssl_mode,
+                "enabled": h.enabled,
+            }
+            for h in hosts
+        ]
+    )
+    background_tasks.add_task(reload_caddy)
+    return {"reloaded": True, "site_count": len(hosts), "reload_pending": True}
+
+
+@router.post("/certs/renew", response_model=CertRenewResponse)
+async def renew_certificate(
+    data: CertRenewRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(RequireOperator),
+):
+    """Force re-issue: delete on-disk cert, then restart Caddy after the response."""
+    try:
+        result = prepare_cert_renewal(data.hostname)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    background_tasks.add_task(reload_caddy)
+    await log_activity(
+        db,
+        "ssl",
+        f"Certificate renew requested for {result['hostname']}",
+        LogLevel.INFO,
+        details=result,
+        user_id=user.id,
+    )
+    return CertRenewResponse(**result)
+
+
+@router.post("/certs/renew-expiring", response_model=CertRenewExpiringResponse)
+async def renew_expiring_certificates(
+    data: CertRenewExpiringRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(RequireOperator),
+):
+    """Force re-issue for certificates within the expiry window."""
+    try:
+        result = prepare_expiring_cert_renewals(data.within_days)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if result["reload_pending"]:
+        background_tasks.add_task(reload_caddy)
+    await log_activity(
+        db,
+        "ssl",
+        result["message"],
+        LogLevel.INFO,
+        details={"within_days": data.within_days, "renewed_count": result["renewed_count"]},
+        user_id=user.id,
+    )
+    return CertRenewExpiringResponse(**result)

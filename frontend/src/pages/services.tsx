@@ -76,7 +76,16 @@ export function ServicesPage() {
       setForm((f) => ({ ...f, subdomain: "", target: "" }));
       setPortStatus(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to provision service");
+      const msg = err instanceof Error ? err.message : "Failed to provision service";
+      // Safety net if a proxy hop still drops the connection mid-flight
+      if (/networkerror|failed to fetch|load failed|network request failed/i.test(msg)) {
+        alert(
+          "Connection dropped while finishing setup (proxy may have restarted). " +
+            "Check DNS Records / Caddy Proxy — the service was likely created successfully."
+        );
+      } else {
+        alert(msg);
+      }
     } finally {
       setSubmitting(false);
     }

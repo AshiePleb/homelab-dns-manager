@@ -423,8 +423,23 @@ class ApiClient {
   }
 
   reloadCaddy() {
-    return this.request<{ reloaded: boolean; site_count: number }>("/caddy/reload", {
+    return this.request<{ reloaded: boolean; site_count: number; reload_pending?: boolean }>(
+      "/caddy/reload",
+      { method: "POST" }
+    );
+  }
+
+  renewCertificate(hostname: string) {
+    return this.request<CertRenewResult>("/caddy/certs/renew", {
       method: "POST",
+      body: JSON.stringify({ hostname }),
+    });
+  }
+
+  renewExpiringCertificates(within_days = 14) {
+    return this.request<CertRenewExpiringResult>("/caddy/certs/renew-expiring", {
+      method: "POST",
+      body: JSON.stringify({ within_days }),
     });
   }
 }
@@ -772,6 +787,25 @@ export interface CaddyHost {
   ssl_message: string;
   has_cert: boolean;
   updated_at: string;
+}
+
+export interface CertRenewResult {
+  hostname: string;
+  cert_removed: boolean;
+  had_cert: boolean;
+  previous_expires_at: string | null;
+  previous_days_remaining: number | null;
+  reload_pending: boolean;
+  message: string;
+}
+
+export interface CertRenewExpiringResult {
+  within_days: number;
+  renewed_count: number;
+  skipped_count: number;
+  renewed: CertRenewResult[];
+  reload_pending: boolean;
+  message: string;
 }
 
 export interface ApiKeyUsage {

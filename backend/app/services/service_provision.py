@@ -16,19 +16,30 @@ from app.services.caddy_service import write_all_sites, reload_caddy
 
 
 def normalize_subdomain(subdomain: str) -> str:
-    return subdomain.strip().lower().lstrip("*.")
+    """Normalize label; keep leading ``*.`` for Cloudflare wildcard A records."""
+    s = subdomain.strip().lower()
+    if s.startswith("*."):
+        return s
+    return s.lstrip("*.")
 
 
 def build_fqdn(subdomain: str, base_domain: str) -> str:
     base = base_domain.strip().lower().rstrip(".")
     sub = normalize_subdomain(subdomain)
+    wild = False
+    if sub.startswith("*."):
+        wild = True
+        sub = sub[2:]
     if not sub or sub in ("@", "root"):
-        return base
-    if sub == base or sub.endswith(f".{base}"):
-        return sub
-    if "." in sub:
-        return sub
-    return f"{sub}.{base}"
+        fqdn = base
+    elif sub == base or sub.endswith(f".{base}"):
+        fqdn = sub
+    elif "." in sub:
+        fqdn = sub
+    else:
+        fqdn = f"{sub}.{base}"
+    return f"*.{fqdn}" if wild else fqdn
+
 
 
 def parse_host_port(target: str, default_port: int = 80) -> tuple[str, int]:
@@ -62,7 +73,14 @@ async def infer_default_zone_from_hostnames(hostnames: list[str]) -> str | None:
     return min(candidates, key=len) if candidates else None
 
 
-async def _sync_caddy(db: AsyncSession) -> None:
+async def _sync_caddy(db: AsyncSession, *, reload: bool = True) -> bool:
+    """Write Caddyfile from DB. Optionally restart Caddy immediately.
+
+    Prefer ``reload=False`` when the UI is served through Caddy — a mid-request
+    container restart tears down the browser connection (NetworkError) even though
+    provisioning succeeded. Callers should schedule ``reload_caddy`` via
+    FastAPI BackgroundTasks after the response is sent.
+    """
     result = await db.execute(select(ProxyHost).where(ProxyHost.enabled == True))
     hosts = result.scalars().all()
     write_all_sites(
@@ -77,7 +95,9 @@ async def _sync_caddy(db: AsyncSession) -> None:
             for h in hosts
         ]
     )
-    reload_caddy()
+    if reload:
+        return reload_caddy()
+    return False
 
 
 async def provision_service(
@@ -91,6 +111,7 @@ async def provision_service(
     create_dns: bool = True,
     create_proxy: bool = True,
     skip_port_check: bool = False,
+    defer_caddy_reload: bool = False,
     user_id: int | None = None,
     api_key_id: int | None = None,
 ) -> dict:
@@ -99,13 +120,16 @@ async def provision_service(
         raise ValueError("No default domain configured. Set it in Settings → General.")
 
     hostname = build_fqdn(subdomain, zone)
+    # Literal ``*.host`` is DNS-only — Caddy/LE need concrete hostnames per site.
+    if hostname.startswith("*."):
+        create_proxy = False
     proxied = False  # grey cloud — Caddy handles HTTPS via Let's Encrypt
     public_ip: str | None = None
     dns_record_id: int | None = None
     proxy_host_id: int | None = None
     port_status = await check_port(forward_host, forward_port)
 
-    if not skip_port_check and not port_status["reachable"]:
+    if create_proxy and not skip_port_check and not port_status["reachable"]:
         raise ValueError(
             f"Port {forward_port} on {forward_host} is not reachable: {port_status['message']}. "
             "Check firewall/router port forwarding, or enable 'Skip port check'."
@@ -126,6 +150,10 @@ async def provision_service(
                 )
                 if not existing_dns.scalar_one_or_none():
                     await ensure_dns_limit(db, key_row)
+        existing_before = await db.execute(
+            select(DNSRecord).where(DNSRecord.hostname == hostname, DNSRecord.record_type == "A")
+        )
+        dns_created = existing_before.scalar_one_or_none() is None
         public_ip = await get_public_ip()
         record = await ensure_managed_ddns_hostname(
             db, hostname, proxied=proxied, current_ip=public_ip, api_key_id=api_key_id
@@ -136,6 +164,8 @@ async def provision_service(
         if api_key_id is not None:
             record.api_key_id = api_key_id
         dns_record_id = record.id
+    else:
+        dns_created = False
 
     if create_proxy:
         existing = await db.execute(select(ProxyHost).where(ProxyHost.hostname == hostname))
@@ -171,9 +201,11 @@ async def provision_service(
             db.add(proxy)
         await db.flush()
         proxy_host_id = proxy.id
-        await _sync_caddy(db)
+        await _sync_caddy(db, reload=not defer_caddy_reload)
+        caddy_reload_pending = defer_caddy_reload
     else:
         proxy_created = False
+        caddy_reload_pending = False
 
     ssl_label = "Caddy HTTPS (Let's Encrypt)"
     mapping = f"{hostname} → {forward_host}:{forward_port} [{ssl_label}]"
@@ -196,7 +228,7 @@ async def provision_service(
     )
 
     # Only notify on first create — upserts / double-submits must not spam Discord
-    if proxy_created or (create_dns and not create_proxy):
+    if proxy_created or dns_created:
         from app.services.notification_service import send_notifications
         await send_notifications(
             db,
@@ -223,6 +255,7 @@ async def provision_service(
         "port_message": port_status["message"],
         "mapping": mapping,
         "created": proxy_created if create_proxy else True,
+        "caddy_reload_pending": caddy_reload_pending,
     }
 
 
@@ -233,6 +266,7 @@ async def update_service_target(
     forward_host: str,
     forward_port: int,
     skip_port_check: bool = False,
+    defer_caddy_reload: bool = False,
     user_id: int | None = None,
     api_key_id: int | None = None,
 ) -> dict:
@@ -270,6 +304,7 @@ async def update_service_target(
             "mapping": f"{proxy.hostname} → {new_target}",
             "changed": False,
             "caddy_reloaded": False,
+            "caddy_reload_pending": False,
         }
 
     proxy.forward_host = host
@@ -277,7 +312,7 @@ async def update_service_target(
     proxy.port_reachable = port_status["reachable"]
     proxy.last_port_check = datetime.now(timezone.utc)
     await db.flush()
-    await _sync_caddy(db)
+    await _sync_caddy(db, reload=not defer_caddy_reload)
 
     await log_activity(
         db,
@@ -297,7 +332,9 @@ async def update_service_target(
         "port_message": port_status["message"],
         "mapping": f"{proxy.hostname} → {new_target}",
         "changed": True,
+        # True when config was applied (immediate reload or scheduled after response)
         "caddy_reloaded": True,
+        "caddy_reload_pending": defer_caddy_reload,
     }
 
 
@@ -306,7 +343,8 @@ async def delete_service(
     proxy_id: int,
     user_id: int | None = None,
     api_key_id: int | None = None,
-) -> None:
+    defer_caddy_reload: bool = False,
+) -> dict:
     result = await db.execute(select(ProxyHost).where(ProxyHost.id == proxy_id))
     host = result.scalar_one_or_none()
     if not host:
@@ -316,10 +354,14 @@ async def delete_service(
     hostname = host.hostname
     await db.delete(host)
     await db.flush()
-    await _sync_caddy(db)
+    await _sync_caddy(db, reload=not defer_caddy_reload)
     await log_activity(db, "service", f"Removed proxy for {hostname}", LogLevel.WARNING, user_id=user_id)
     from app.services.notification_service import send_notifications
     await send_notifications(db, "service_deleted", {"hostname": hostname})
+    return {
+        "hostname": hostname,
+        "caddy_reload_pending": defer_caddy_reload,
+    }
 
 
 async def list_provisioned_services(db: AsyncSession) -> list[dict]:

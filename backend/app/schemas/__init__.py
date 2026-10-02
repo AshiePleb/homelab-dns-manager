@@ -455,6 +455,33 @@ class CaddyHostResponse(BaseModel):
     updated_at: datetime
 
 
+class CertRenewRequest(BaseModel):
+    hostname: str
+
+
+class CertRenewResponse(BaseModel):
+    hostname: str
+    cert_removed: bool
+    had_cert: bool
+    previous_expires_at: str | None = None
+    previous_days_remaining: int | None = None
+    reload_pending: bool = True
+    message: str
+
+
+class CertRenewExpiringRequest(BaseModel):
+    within_days: int = Field(default=14, ge=0, le=90)
+
+
+class CertRenewExpiringResponse(BaseModel):
+    within_days: int
+    renewed_count: int
+    skipped_count: int
+    renewed: list[CertRenewResponse]
+    reload_pending: bool
+    message: str
+
+
 class BulkRecordsRequest(BaseModel):
     record_ids: list[int] = Field(min_length=1)
     action: str = Field(description="enable_ddns | disable_ddns | force_update | delete")

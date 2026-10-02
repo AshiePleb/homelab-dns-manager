@@ -38,6 +38,8 @@ def _parse_legacy_domains(raw: str | None) -> list[str]:
 
 def _zone_for_hostname(hostname: str, zones: list[Domain]) -> Domain | None:
     host = hostname.lower().rstrip(".")
+    if host.startswith("*."):
+        host = host[2:]
     parts = host.split(".")
     for i in range(len(parts) - 1):
         candidate = ".".join(parts[i:])

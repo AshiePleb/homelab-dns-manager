@@ -1,6 +1,6 @@
 """External API for integrations (e.g. HomeLab WebHost Manager)."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -30,6 +30,7 @@ from app.services.service_provision import (
     parse_host_port,
     build_fqdn,
 )
+from app.services.caddy_service import reload_caddy
 from app.services.port_check import check_port
 from app.services.cloudflare_service import get_cloudflare_service
 
@@ -137,6 +138,7 @@ async def preview_hostname(
 @router.post("/services/provision", response_model=ServiceProvisionResponse)
 async def create_service(
     data: ServiceProvisionRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     api_key: ApiKey = Depends(get_api_key),
 ):
@@ -157,8 +159,11 @@ async def create_service(
             create_dns=data.create_dns,
             create_proxy=data.create_proxy,
             skip_port_check=data.skip_port_check,
+            defer_caddy_reload=True,
             api_key_id=api_key.id,
         )
+        if result.get("caddy_reload_pending"):
+            background_tasks.add_task(reload_caddy)
         return ServiceProvisionResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -170,6 +175,7 @@ async def create_service(
 async def update_service(
     service_id: int,
     data: ServiceTargetUpdate,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     api_key: ApiKey = Depends(get_api_key),
 ):
@@ -186,8 +192,11 @@ async def update_service(
             forward_host=host,
             forward_port=port,
             skip_port_check=data.skip_port_check,
+            defer_caddy_reload=True,
             api_key_id=api_key.id,
         )
+        if result.get("caddy_reload_pending"):
+            background_tasks.add_task(reload_caddy)
         return ServiceTargetUpdateResponse(**result)
     except ValueError as e:
         detail = str(e)
@@ -198,6 +207,7 @@ async def update_service(
 @router.delete("/services/{service_id}")
 async def remove_service(
     service_id: int,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     api_key: ApiKey = Depends(get_api_key),
 ):
@@ -208,7 +218,9 @@ async def remove_service(
     if host.api_key_id != api_key.id:
         raise HTTPException(status_code=403, detail="This service was not created by your API key")
     try:
-        await delete_service(db, service_id, api_key_id=api_key.id)
+        deleted = await delete_service(db, service_id, api_key_id=api_key.id, defer_caddy_reload=True)
+        if deleted.get("caddy_reload_pending"):
+            background_tasks.add_task(reload_caddy)
         return {"message": "Service removed"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

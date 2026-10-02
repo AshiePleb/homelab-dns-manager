@@ -49,6 +49,8 @@ export function CaddyPage() {
   const [editTarget, setEditTarget] = useState("");
   const [editSkipPort, setEditSkipPort] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
+  const [renewingHostname, setRenewingHostname] = useState<string | null>(null);
+  const [renewingExpiring, setRenewingExpiring] = useState(false);
 
   const load = async () => {
     const isRefresh = status !== null;
@@ -84,7 +86,7 @@ export function CaddyPage() {
       const result = await api.reloadCaddy();
       setMessage(
         result.reloaded
-          ? `Caddy reloaded — ${result.site_count} site(s) active`
+          ? `Caddy reload scheduled — ${result.site_count} site(s)`
           : "Reload failed — check Docker socket and homelab-caddy container"
       );
       // Container is briefly down while restarting — wait before re-checking status
@@ -94,6 +96,50 @@ export function CaddyPage() {
       setMessage(e instanceof Error ? e.message : "Reload failed");
     } finally {
       setRestarting(false);
+    }
+  };
+
+  const handleRenew = async (hostname: string) => {
+    if (!isOperator || renewingHostname || renewingExpiring) return;
+    setRenewingHostname(hostname);
+    setMessage("");
+    try {
+      const result = await api.renewCertificate(hostname);
+      setMessage(result.message);
+      await new Promise((r) => setTimeout(r, 4000));
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Renew failed";
+      if (/networkerror|failed to fetch|load failed/i.test(msg)) {
+        setMessage("Connection dropped during Caddy restart — certificate renew was likely started. Refresh in a few seconds.");
+      } else {
+        setMessage(msg);
+      }
+    } finally {
+      setRenewingHostname(null);
+    }
+  };
+
+  const handleRenewExpiring = async () => {
+    if (!isOperator || renewingHostname || renewingExpiring) return;
+    setRenewingExpiring(true);
+    setMessage("");
+    try {
+      const result = await api.renewExpiringCertificates(14);
+      setMessage(result.message);
+      if (result.reload_pending) {
+        await new Promise((r) => setTimeout(r, 4000));
+      }
+      await load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Renew failed";
+      if (/networkerror|failed to fetch|load failed/i.test(msg)) {
+        setMessage("Connection dropped during Caddy restart — renew was likely started. Refresh in a few seconds.");
+      } else {
+        setMessage(msg);
+      }
+    } finally {
+      setRenewingExpiring(false);
     }
   };
 
@@ -127,7 +173,7 @@ export function CaddyPage() {
     }
   };
 
-  const busy = initialLoading || refreshing || restarting;
+  const busy = initialLoading || refreshing || restarting || Boolean(renewingHostname) || renewingExpiring;
 
   return (
     <div className="space-y-6">
@@ -312,7 +358,8 @@ export function CaddyPage() {
             SSL Certificates
           </CardTitle>
           <CardDescription>
-            Certificate expiry from Caddy on-disk store — automatic alerts at 14 days remaining
+            Caddy auto-renews certificates before expiry. Refresh reloads status; Renew deletes the
+            on-disk cert and restarts Caddy to force a new Let&apos;s Encrypt / ZeroSSL issue.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
@@ -320,6 +367,11 @@ export function CaddyPage() {
             rows={sslHealth}
             loading={sslLoading || initialLoading}
             onRefresh={load}
+            canRenew={isOperator}
+            onRenew={handleRenew}
+            onRenewExpiring={handleRenewExpiring}
+            renewingHostname={renewingHostname}
+            renewingExpiring={renewingExpiring}
           />
         </CardContent>
       </Card>

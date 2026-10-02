@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, RotateCcw } from "lucide-react";
 import { ServiceHealthRow } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,11 @@ interface SslCertificatesTableProps {
   rows: ServiceHealthRow[];
   loading?: boolean;
   onRefresh?: () => void;
+  onRenew?: (hostname: string) => Promise<void> | void;
+  onRenewExpiring?: () => Promise<void> | void;
+  renewingHostname?: string | null;
+  renewingExpiring?: boolean;
+  canRenew?: boolean;
   compact?: boolean;
 }
 
@@ -22,6 +27,11 @@ export function SslCertificatesTable({
   rows,
   loading,
   onRefresh,
+  onRenew,
+  onRenewExpiring,
+  renewingHostname,
+  renewingExpiring,
+  canRenew,
   compact,
 }: SslCertificatesTableProps) {
   const sslRows = [...rows]
@@ -36,6 +46,8 @@ export function SslCertificatesTable({
   const expiringSoon = sslRows.filter(
     (r) => r.ssl_days_remaining != null && r.ssl_days_remaining <= 14
   ).length;
+
+  const busy = Boolean(loading || renewingHostname || renewingExpiring);
 
   if (loading && sslRows.length === 0) {
     return (
@@ -59,15 +71,29 @@ export function SslCertificatesTable({
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 pt-2">
           <p className="text-xs text-muted-foreground">
             {expiringSoon > 0
-              ? `${expiringSoon} certificate(s) expiring within 14 days — alerts are sent automatically`
-              : "All certificates valid — expiry alerts fire at 14 days remaining"}
+              ? `${expiringSoon} certificate(s) expiring within 14 days — Caddy auto-renews; use Renew to force re-issue`
+              : "All certificates valid — Caddy auto-renews ~30 days before expiry; alerts at 14 days"}
           </p>
-          {onRefresh && (
-            <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading} className="gap-2">
-              <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-              Refresh
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {canRenew && onRenewExpiring && expiringSoon > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onRenewExpiring()}
+                disabled={busy}
+                className="gap-2"
+              >
+                <RotateCcw className={cn("h-3.5 w-3.5", renewingExpiring && "animate-spin")} />
+                {renewingExpiring ? "Renewing…" : "Renew expiring"}
+              </Button>
+            )}
+            {onRefresh && (
+              <Button variant="outline" size="sm" onClick={onRefresh} disabled={busy} className="gap-2">
+                <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                Refresh
+              </Button>
+            )}
+          </div>
         </div>
       )}
       <div className="overflow-x-auto">
@@ -78,46 +104,65 @@ export function SslCertificatesTable({
               <th className="px-4 py-3 font-medium">Provider</th>
               <th className="px-4 py-3 font-medium">Expires</th>
               <th className="px-4 py-3 font-medium">Days left</th>
-              <th className="px-6 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              {canRenew && onRenew && <th className="px-6 py-3 font-medium text-right">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
-            {sslRows.map((row) => (
-              <tr key={row.id} className="hover:bg-muted/20">
-                <td className="px-6 py-3 font-mono text-xs">{row.hostname}</td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {row.ssl_issuer ? `Caddy · ${row.ssl_issuer}` : row.ssl_status === "none" ? "—" : "Caddy"}
-                </td>
-                <td className="px-4 py-3 text-xs">
-                  {row.ssl_expires_at ? formatDateOnly(row.ssl_expires_at) : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {row.ssl_days_remaining != null ? (
-                    <span
-                      className={cn(
-                        "text-xs font-medium",
-                        row.ssl_days_remaining <= 7 && "text-destructive",
-                        row.ssl_days_remaining > 7 && row.ssl_days_remaining <= 14 && "text-warning",
-                        row.ssl_days_remaining > 14 && "text-success"
-                      )}
-                    >
-                      {row.ssl_days_remaining}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+            {sslRows.map((row) => {
+              const rowBusy = renewingHostname === row.hostname;
+              return (
+                <tr key={row.id} className="hover:bg-muted/20">
+                  <td className="px-6 py-3 font-mono text-xs">{row.hostname}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {row.ssl_issuer ? `Caddy · ${row.ssl_issuer}` : row.ssl_status === "none" ? "—" : "Caddy"}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {row.ssl_expires_at ? formatDateOnly(row.ssl_expires_at) : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.ssl_days_remaining != null ? (
+                      <span
+                        className={cn(
+                          "text-xs font-medium",
+                          row.ssl_days_remaining <= 7 && "text-destructive",
+                          row.ssl_days_remaining > 7 && row.ssl_days_remaining <= 14 && "text-warning",
+                          row.ssl_days_remaining > 14 && "text-success"
+                        )}
+                      >
+                        {row.ssl_days_remaining}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {row.ssl_days_remaining != null ? (
+                      <Badge variant={sslExpiryVariant(row.ssl_days_remaining)}>
+                        {row.ssl_days_remaining <= 14 ? "Expiring soon" : "Valid"}
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">{row.ssl_status}</Badge>
+                    )}
+                  </td>
+                  {canRenew && onRenew && (
+                    <td className="px-6 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={busy}
+                        onClick={() => onRenew(row.hostname)}
+                        title="Delete on-disk cert and restart Caddy to re-issue"
+                      >
+                        <RotateCcw className={cn("h-3.5 w-3.5", rowBusy && "animate-spin")} />
+                        {rowBusy ? "Renewing…" : "Renew"}
+                      </Button>
+                    </td>
                   )}
-                </td>
-                <td className="px-6 py-3">
-                  {row.ssl_days_remaining != null ? (
-                    <Badge variant={sslExpiryVariant(row.ssl_days_remaining)}>
-                      {row.ssl_days_remaining <= 14 ? "Expiring soon" : "Valid"}
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">{row.ssl_status}</Badge>
-                  )}
-                </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
